@@ -96,8 +96,8 @@ function VisualGuide({ imageUrl, step, videoStream }) {
     };
   }, [imageUrl, measureImage]);
 
-  const overlayStyle = imageUrl
-    ? imageBounds?.source === imageUrl && {
+  const overlayStyle = (imageUrl && imageBounds)
+    ? {
       left: `${imageBounds.left}px`,
       top: `${imageBounds.top}px`,
       width: `${imageBounds.width}px`,
@@ -146,7 +146,7 @@ function fileToDataUrl(file) {
 
 function parseBoxFromText(text) {
   if (!text) return null;
-  const regex = /\[box:\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\]/gi;
+  const regex = /[\[\(]?box:\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*[\]\)]?/gi;
   const matches = [...text.matchAll(regex)];
   if (matches.length > 0) {
     const lastMatch = matches[matches.length - 1];
