@@ -161,6 +161,8 @@ export default function App() {
   const [skillsData, setSkillsData] = useState([]);
   const [obsData, setObsData] = useState([]);
   const [consent, setConsentState] = useState(() => getConsent());
+  const [liveChoiceOpen, setLiveChoiceOpen] = useState(false);
+  const [isLivePhotoMode, setIsLivePhotoMode] = useState(false);
   const inputRef = useRef(null);
   const goalInputRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -290,6 +292,12 @@ export default function App() {
     await session.speakWithVision(null, 'image/jpeg');
   }
 
+  function startLiveWithPhotoUpload() {
+    setLiveChoiceOpen(false);
+    setIsLivePhotoMode(true);
+    setStage('photo');
+  }
+
   function stopLiveVoice() {
     if (liveSession) { liveSession.stop(); setLiveSession(null); }
     setLiveState('idle');
@@ -329,6 +337,58 @@ export default function App() {
       const dataUrl = await fileToDataUrl(file);
       const [header, image] = dataUrl.split(',');
       const mimeType = header.match(/data:(.*?);base64/)?.[1] || file.type || 'image/jpeg';
+
+      if (isLivePhotoMode) {
+        setStage('loading');
+        setAnalysisNote('실시간 AI와 연결을 시작합니다.');
+        
+        const apiKey = await fetchGeminiApiKey();
+        if (!apiKey) {
+          alert('Gemini API 키가 설정되지 않았습니다.');
+          setStage('photo');
+          return;
+        }
+
+        const dummyGoal = {
+          id: 'goal-live', label: '실시간 AI 도움', hint: '음성으로 물어보세요', icon: '🤖',
+          steps: [{ text: '올려주신 사진을 보며 궁금한 점을 말로 물어보세요.', label: '실시간', box: null }],
+        };
+        setSelectedGoal(dummyGoal);
+        setStepIndex(0);
+        setImageBase64(image);
+        setImageMimeType(mimeType);
+        setDeviceInfo(null);
+        setMatchedSkills([]);
+
+        // Try to identify device in the background so skills can be loaded if found
+        identifyDevice(image, mimeType).then((result) => {
+          if (result?.device) setDeviceInfo(result.device);
+          if (result?.skills?.length) setMatchedSkills(result.skills);
+        }).catch(() => {});
+
+        const prompt = '당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자가 올려준 사진 화면을 보며 질문하고 있습니다. 친절하고 쉬운 한국어로 음성 안내를 하세요.';
+        const session = startLiveSession(apiKey, {
+          systemPrompt: prompt,
+          onResponse: () => {},
+          onTranscription: ({speaker, text}) => {
+            if (speaker === 'user') console.log('[live] 🎤', text);
+            else console.log('[live] 🤖', text);
+          },
+          onStateChange: (newState) => {
+            if (newState === 'ready' || newState === 'listening') setLiveState('listening');
+            else if (newState === 'muted') setLiveState('muted');
+            else if (newState === 'idle' || newState === 'error') setLiveState('idle');
+            else if (newState === 'connecting') setLiveState('connecting');
+          },
+          onError: (err) => { console.warn('[live]', err.message); setLiveState('idle'); },
+        });
+        setLiveSession(session);
+        setLiveState('connecting');
+        setStage('guide');
+        await session.speak(image);
+        return;
+      }
+
       const payload = { image, mimeType, requestedGoal: customRequest.trim() };
       setAnalysisPayload(payload);
       setImageBase64(image);
@@ -517,6 +577,8 @@ export default function App() {
     setCustomRequest('');
     setCustomError('');
     setVoiceStatus('idle');
+    setLiveChoiceOpen(false);
+    setIsLivePhotoMode(false);
     if (inputRef.current) inputRef.current.value = '';
   }
 
@@ -545,42 +607,61 @@ export default function App() {
               <h1 aria-label="무엇을 하고 싶으세요?">무엇을 하고<br /><em>싶으세요?</em></h1>
               <p>하고 싶은 일을 먼저 알려주세요. 그다음 필요한 화면을 찍을게요.</p>
               <form className="intent-card" onSubmit={confirmRequestedGoal}>
-                <div className="intent-input-wrap">
-                  <label className="custom-input-label">
-                    <span>하고 싶은 일</span>
-                    <input ref={goalInputRef} value={customRequest} onChange={(event) => setCustomRequest(event.target.value)} placeholder="예: 빅맥 주문하기" />
-                  </label>
-                  <button
-                    className={`intent-mic-button ${voiceStatus === 'listening' ? 'is-listening' : ''}`}
-                    type="button"
-                    aria-label="말로 입력하기"
-                    title={voiceStatus === 'listening' ? '듣고 있어요' : '말로 입력하기'}
-                    onClick={startListening}
-                    disabled={voiceStatus === 'listening'}
-                  >
-                    <Mic size={22} aria-hidden="true" />
-                  </button>
-                </div>
-                {customError && <p className="voice-message is-error" role="alert">{customError}</p>}
-                <div className="consent-checkbox-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 16, width: '100%', justifyContent: 'flex-start' }}>
-                  <input
-                    id="consent-checkbox"
-                    type="checkbox"
-                    checked={consent}
-                    onChange={(e) => handleConsentChange(e.target.checked)}
-                    style={{ width: 20, height: 20, cursor: 'pointer' }}
-                  />
-                  <label htmlFor="consent-checkbox" style={{ fontSize: 15, cursor: 'pointer', color: '#4a5568' }}>
-                    더 나은 안내를 위해 사진 제공에 동의합니다 (선택)
-                  </label>
-                </div>
-                <button type="submit" className="primary-button intent-next">
-                  다음 단계 <ChevronRight size={20} />
-                </button>
-                <button type="button" className="secondary-button intent-live" onClick={startLiveFromHome}>
-                  <Mic size={20} aria-hidden="true" />
-                  실시간 AI로 시작
-                </button>
+                {!liveChoiceOpen ? (
+                  <>
+                    <div className="intent-input-wrap">
+                      <label className="custom-input-label">
+                        <span>하고 싶은 일</span>
+                        <input ref={goalInputRef} value={customRequest} onChange={(event) => setCustomRequest(event.target.value)} placeholder="예: 빅맥 주문하기" />
+                      </label>
+                      <button
+                        className={`intent-mic-button ${voiceStatus === 'listening' ? 'is-listening' : ''}`}
+                        type="button"
+                        aria-label="말로 입력하기"
+                        title={voiceStatus === 'listening' ? '듣고 있어요' : '말로 입력하기'}
+                        onClick={startListening}
+                        disabled={voiceStatus === 'listening'}
+                      >
+                        <Mic size={22} aria-hidden="true" />
+                      </button>
+                    </div>
+                    {customError && <p className="voice-message is-error" role="alert">{customError}</p>}
+                    <div className="consent-checkbox-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 16, width: '100%', justifyContent: 'flex-start' }}>
+                      <input
+                        id="consent-checkbox"
+                        type="checkbox"
+                        checked={consent}
+                        onChange={(e) => handleConsentChange(e.target.checked)}
+                        style={{ width: 20, height: 20, cursor: 'pointer' }}
+                      />
+                      <label htmlFor="consent-checkbox" style={{ fontSize: 15, cursor: 'pointer', color: '#4a5568' }}>
+                        더 나은 안내를 위해 사진 제공에 동의합니다 (선택)
+                      </label>
+                    </div>
+                    <button type="submit" className="primary-button intent-next">
+                      다음 단계 <ChevronRight size={20} />
+                    </button>
+                    <button type="button" className="secondary-button intent-live" onClick={() => setLiveChoiceOpen(true)}>
+                      <Mic size={20} aria-hidden="true" />
+                      실시간 AI로 시작
+                    </button>
+                  </>
+                ) : (
+                  <div className="live-choice-box" style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', padding: '4px 0' }}>
+                    <h3 style={{ margin: '0 0 4px', fontSize: 17, color: '#2d3748', textAlign: 'center', fontWeight: 700 }}>
+                      실시간 AI 도움 방식을 선택해주세요
+                    </h3>
+                    <button type="button" className="primary-button" onClick={startLiveFromHome} style={{ background: '#6f42c1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, fontSize: 16 }}>
+                      📹 카메라 실시간 영상으로 도움받기
+                    </button>
+                    <button type="button" className="primary-button" onClick={startLiveWithPhotoUpload} style={{ background: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, fontSize: 16 }}>
+                      📸 사진을 먼저 한 장 찍어서 도움받기
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => setLiveChoiceOpen(false)} style={{ height: 48, fontSize: 15 }}>
+                      취소하고 돌아가기
+                    </button>
+                  </div>
+                )}
               </form>
               <div className="trust-row">
                 <span><Check size={17} /> 회원가입 없이</span>
@@ -599,11 +680,24 @@ export default function App() {
 
         {stage === 'photo' && (
           <section className="photo-stage">
-            <button className="back-button" type="button" onClick={() => setStage('home')}><ArrowLeft size={20} /> 할 일 다시 적기</button>
-            <span className="step-label"><Camera size={17} /> 2단계 · 화면 사진 찍기</span>
-            <h1>이제 화면을 찍어주세요</h1>
-            <p className="photo-purpose">도와드릴 일 <strong>{customRequest}</strong></p>
-            <p>누를 버튼과 글자가 모두 보이도록 화면 전체를 찍어주세요.</p>
+            {isLivePhotoMode ? (
+              <>
+                <button className="back-button" type="button" onClick={reset}><ArrowLeft size={20} /> 처음으로</button>
+                <span className="step-label"><Camera size={17} /> 실시간 AI 도움 · 사진 등록</span>
+                <h1>도움받을 화면을 찍어주세요</h1>
+                <p style={{ fontSize: 16, color: '#4a5568', marginTop: 12, marginBottom: 24, lineHeight: 1.5, textAlign: 'center', maxWidth: 480 }}>
+                  안내받을 기기나 화면 전체가 잘 보이게 찍어주세요.<br />사진을 올리면 바로 실시간 AI 대화가 시작됩니다.
+                </p>
+              </>
+            ) : (
+              <>
+                <button className="back-button" type="button" onClick={() => setStage('home')}><ArrowLeft size={20} /> 할 일 다시 적기</button>
+                <span className="step-label"><Camera size={17} /> 2단계 · 화면 사진 찍기</span>
+                <h1>이제 화면을 찍어주세요</h1>
+                <p className="photo-purpose">도와드릴 일 <strong>{customRequest}</strong></p>
+                <p>누를 버튼과 글자가 모두 보이도록 화면 전체를 찍어주세요.</p>
+              </>
+            )}
             <label className="primary-button photo-upload-button" role="button" tabIndex={0}
               aria-label="사진 찍기"
               onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } }}
