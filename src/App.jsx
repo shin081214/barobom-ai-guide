@@ -58,6 +58,12 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
   const videoRef = useRef(null);
   const [mediaBounds, setMediaBounds] = useState(null);
   const [liveResolution, setLiveResolution] = useState(null); // { width, height } for the live overlay pill
+  // 일부 안드로이드 디바이스는 video.videoWidth/Height를 회전 전 raw 값으로
+  // 리포트하고, 실제 화면에 그려지는 영상은 회전된 상태로 들어온다. 이런 경우
+  // intrinsic 비율과 실제 영상 비율이 어긋나 박스가 어긋난다. 첫 frame을
+  // canvas에 그려 실제 비율을 측정하고, videoWidth/Height와 다르면 자동으로
+  // swap/교정한 값을 적용한다.
+  const [intrinsicOverride, setIntrinsicOverride] = useState(null); // { width, height }
 
   useEffect(() => {
     const video = videoRef.current;
@@ -77,6 +83,74 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
         console.warn('[visual-guide] video.play() rejected:', err?.name, err?.message);
       });
     }
+  }, [videoStream]);
+
+  // 첫 frame이 도착하면 canvas에 그려서 실제 캡처 비율을 본다. 일부 안드로이드
+  // 디바이스는 video.videoWidth/Height를 회전 전 raw 값으로 리포트하므로,
+  // canvas에서 측정된 비율과 intrinsic 비율이 다르면 자동으로 교정한다.
+  // requestVideoFrameCallback을 쓰면 video timeline에서 정확히 1 frame을 보장.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoStream) {
+      setIntrinsicOverride(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let probeCanvas = null;
+    let timeoutHandle = null;
+
+    const measureFirstFrame = () => {
+      if (cancelled || !video || !video.videoWidth || !video.videoHeight) return;
+      try {
+        // video.frameElement 자체의 비율은 object-fit: contain 적용 후의
+        // element 비율과 같다. 따라서 frame 영역 비율과 비교해서 intrinsic
+        // 회전 여부를 추정한다:
+        //   - intrinsic_ratio == frame_ratio        → 회전 없음, 그대로
+        //   - swap(intrinsic_ratio) ~= frame_ratio  → 회전되어 잘못 보고된 경우
+        // frame 영역 비율은 getContainedImageBounds에서 outer로 쓸 비율과 같다.
+        const frameEl = frameRef.current;
+        const frameRect = frameEl?.getBoundingClientRect?.();
+        if (!frameRect || frameRect.width < 8 || frameRect.height < 8) return;
+        const frameRatio = frameRect.width / frameRect.height;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        const intrinsicRatio = w / h;
+        const swappedRatio = h / w;
+
+        const diffIntrinsic = Math.abs(frameRatio - intrinsicRatio) / frameRatio;
+        const diffSwapped = Math.abs(frameRatio - swappedRatio) / frameRatio;
+
+        if (diffSwapped + 0.02 < diffIntrinsic) {
+          // swap한 비율이 frame 비율과 훨씬 가까우면, intrinsic이 회전 전
+          // raw 값이니 swap해서 사용한다.
+          if (typeof console !== 'undefined' && process.env?.NODE_ENV === 'development') {
+            console.log('[visual-guide] intrinsic auto-corrected (rotation)',
+              `${w}x${h}`, '→', `${h}x${w}`);
+          }
+          setIntrinsicOverride({ width: h, height: w });
+        } else {
+          setIntrinsicOverride(null);
+        }
+      } catch (err) {
+        console.warn('[visual-guide] first-frame probe failed:', err?.message);
+      }
+    };
+
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      const handle = video.requestVideoFrameCallback(measureFirstFrame);
+      return () => {
+        cancelled = true;
+        try { video.cancelVideoFrameCallback(handle); } catch { /* noop */ }
+        if (timeoutHandle) window.clearTimeout(timeoutHandle);
+      };
+    }
+    // 옛 브라우저 fallback: 0.6초 후 한 번 시도.
+    timeoutHandle = window.setTimeout(measureFirstFrame, 600);
+    return () => {
+      cancelled = true;
+      if (timeoutHandle) window.clearTimeout(timeoutHandle);
+    };
   }, [videoStream]);
 
   const measureMedia = useCallback(() => {
@@ -106,32 +180,65 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
       // 사각형(display) *안에서* videoWidth/Height 비율로 contain 한 결과가
       // 사용자가 화면에서 보는 실제 영상이다. 따라서:
       //   - display: element.getBoundingClientRect() (object-fit 적용 후)
-      //   - natural: video.videoWidth / video.videoHeight
+      //   - natural: video.videoWidth / video.videoHeight (또는 intrinsicOverride)
       // 를 함께 넘겨 letterbox/pillarbox 영역을 정확히 계산한다. display만
       // 넘기면 host element 전체 영역이 박스로 잡혀 검정 여백 위로 어긋난다.
+      //
+      // 일부 안드로이드 디바이스는 videoWidth/Height를 회전 전 raw 값으로
+      // 리포트하므로 swap된 후보도 같이 계산하고, frame 정중앙에 더 가까운
+      // 결과를 채택한다.
       const videoRect = video.getBoundingClientRect();
       const frameRect = frame.getBoundingClientRect();
       const displayWidth = videoRect.width;
       const displayHeight = videoRect.height;
-      const intrinsicWidth = video.videoWidth;
-      const intrinsicHeight = video.videoHeight;
+      let intrinsicWidth = intrinsicOverride?.width ?? video.videoWidth;
+      let intrinsicHeight = intrinsicOverride?.height ?? video.videoHeight;
+
       if (displayWidth < 1 || displayHeight < 1) {
         // 아직 layout이 잡히기 전 — 박스를 그리지 않는다.
         setMediaBounds(null);
         setLiveResolution(null);
         return;
       }
-      const bounds = getContainedImageBounds({
+
+      const computeBounds = (w, h) => getContainedImageBounds({
         containerWidth,
         containerHeight,
-        naturalWidth: intrinsicWidth,
-        naturalHeight: intrinsicHeight,
+        naturalWidth: w,
+        naturalHeight: h,
         displayWidth,
         displayHeight,
       });
+
+      const original = computeBounds(intrinsicWidth, intrinsicHeight);
+      const swapped = computeBounds(intrinsicHeight, intrinsicWidth);
+      // 회전 잘못 보고 케이스 검출: 진짜 영상 비율과 일치하는 쪽을 채택.
+      // 진짜 영상의 contain 영역은 frame 비율과 가장 가까워야 한다.
+      let bounds = original;
+      if (original && swapped) {
+        const frameRatio = containerWidth / containerHeight;
+        const originalRatio = original.width / original.height;
+        const swappedRatio = swapped.width / swapped.height;
+        const originalDiff = Math.abs(originalRatio - frameRatio) / frameRatio;
+        const swappedDiff = Math.abs(swappedRatio - frameRatio) / frameRatio;
+        // swap된 후보가 5% 이상 frame 비율에 명확히 가까우면 swap 채택.
+        if (swappedDiff + 0.05 < originalDiff) {
+          bounds = swapped;
+          intrinsicWidth = intrinsicHeight;
+          intrinsicHeight = video.videoWidth;
+        }
+      }
+
+      if (typeof console !== 'undefined' && typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
+        console.log('[visual-guide] measure', {
+          frame: { w: containerWidth, h: containerHeight },
+          display: { w: displayWidth, h: displayHeight },
+          intrinsic: { w: intrinsicWidth, h: intrinsicHeight },
+          bounds,
+        });
+      }
+
       setMediaBounds(bounds ? { ...bounds, source: 'video' } : null);
-      // 카메라가 실제로 선택한 해상도를 pill로 노출해서 사용자가
-      // 자동 감지 결과를 확인할 수 있게 한다.
       if (intrinsicWidth > 0 && intrinsicHeight > 0) {
         setLiveResolution({ width: intrinsicWidth, height: intrinsicHeight });
       } else {
@@ -143,7 +250,7 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
     // image/video 둘 다 없는 케이스 (라이브 모드 placeholder).
     setMediaBounds(null);
     setLiveResolution(null);
-  }, [imageUrl, videoStream]);
+  }, [imageUrl, videoStream, intrinsicOverride]);
 
   useEffect(() => {
     const frame = frameRef.current;

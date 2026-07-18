@@ -88,7 +88,7 @@ button:focus-visible, label[role='button']:focus-within { outline: 4px solid rgb
 
 .hero-preview { position: relative; padding: 20px 30px 70px 10px; }
 .hero-preview::before { content: ''; position: absolute; inset: -32px 0 28px -30px; background: #eaf5ee; border-radius: 48% 52% 44% 56% / 54% 38% 62% 46%; transform: rotate(-3deg); }
-.visual-frame { position: relative; width: 100%; border-radius: inherit; overflow: hidden; background: #e9ece9; }
+.visual-frame { position: relative; width: 100%; height: 100%; border-radius: inherit; overflow: hidden; background: #e9ece9; }
 .visual-frame > img { display: block; width: 100%; height: 100%; object-fit: contain; background: #eef0ed; }
 .live-camera-placeholder { width: 100%; height: 100%; min-height: 320px; background: #0f1311; color: #e9ece9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-weight: 800; font-size: 14px; }
 .live-camera-spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: #46d6a2; animation: live-cam-spin .9s linear infinite; }
@@ -156,11 +156,11 @@ button:focus-visible, label[role='button']:focus-within { outline: 4px solid rgb
 .back-button { justify-self: start; }
 .workspace-grid { display: grid; grid-template-columns: 1.08fr .92fr; gap: 27px; align-items: stretch; }
 .image-card, .goal-panel, .instruction-card { background: white; border: 1px solid #e1e8e3; border-radius: 25px; box-shadow: 0 16px 46px rgba(36,72,59,.08); }
-.image-card { padding: 12px; min-width: 0; overflow: hidden; }
+.image-card { padding: 12px; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 .image-card-head { min-height: 43px; display: flex; align-items: center; gap: 8px; padding: 0 4px 10px; font-size: 12px; font-weight: 800; color: #53675f; }
 .image-card-head button { margin-left: auto; border: 0; background: transparent; color: var(--green); text-decoration: underline; cursor: pointer; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ec088; box-shadow: 0 0 0 4px #e4f6ed; }
-.image-card .visual-frame { height: 100%; min-height: 480px; border-radius: 17px; }
+.image-card .visual-frame { flex: 1; min-height: 480px; border-radius: 17px; }
 .image-card-change { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--green); text-decoration: underline; font-weight: 800; font-size: 13px; padding: 8px 4px; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 .image-card-change:focus-visible { outline: 4px solid rgba(244, 200, 75, .65); outline-offset: 2px; }
 /* File input is wrapped in a styled <label>, so the input itself can
@@ -224,8 +224,8 @@ button:focus-visible, label[role='button']:focus-within { outline: 4px solid rgb
 .guide-title strong { font-size: 17px; }
 .reset-button { justify-self: end; }
 .guide-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr); gap: 22px; align-items: stretch; }
-.guide-image { padding: 13px; }
-.guide-image .visual-frame { min-height: 540px; }
+.guide-image { padding: 13px; display: flex; flex-direction: column; }
+.guide-image .visual-frame { flex: 1; min-height: 540px; }
 .instruction-card { padding: 28px; display: flex; flex-direction: column; }
 .progress-head { display: flex; align-items: center; justify-content: space-between; }
 .progress-head span { color: var(--green); font-weight: 800; font-size: 14px; }
