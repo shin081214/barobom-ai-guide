@@ -127,6 +127,20 @@ function fileToDataUrl(file) {
   });
 }
 
+function parseBoxFromText(text) {
+  if (!text) return null;
+  const match = text.match(/\[box:\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\]/i);
+  if (match) {
+    return {
+      x: parseFloat(match[1]),
+      y: parseFloat(match[2]),
+      w: parseFloat(match[3]),
+      h: parseFloat(match[4]),
+    };
+  }
+  return null;
+}
+
 function speak(text) {
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
@@ -163,6 +177,7 @@ export default function App() {
   const [consent, setConsentState] = useState(() => getConsent());
   const [liveChoiceOpen, setLiveChoiceOpen] = useState(false);
   const [isLivePhotoMode, setIsLivePhotoMode] = useState(false);
+  const [liveBox, setLiveBox] = useState(null);
   const inputRef = useRef(null);
   const goalInputRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -206,12 +221,25 @@ export default function App() {
       prompt += `\n\n[아래는 이 기기에 대해 알고 있는 사용 가이드입니다. 이 정보를 참고해서 더 정확하게 안내해주세요.]\n\n${skillBlock}`;
     }
 
+    let accumulatedText = '';
+
     return startLiveSession(apiKey, {
       systemPrompt: prompt,
-      onResponse: () => {},
+      onResponse: (text) => {
+        accumulatedText += text;
+        const box = parseBoxFromText(accumulatedText);
+        if (box) {
+          setLiveBox(box);
+        }
+      },
       onTranscription: ({speaker, text}) => {
-        if (speaker === 'user') console.log('[live] 🎤', text);
-        else console.log('[live] 🤖', text);
+        if (speaker === 'user') {
+          console.log('[live] 🎤', text);
+          accumulatedText = '';
+          setLiveBox(null);
+        } else {
+          console.log('[live] 🤖', text);
+        }
       },
       onStateChange: (newState) => {
         if (newState === 'ready' || newState === 'listening') setLiveState('listening');
@@ -579,6 +607,7 @@ export default function App() {
     setVoiceStatus('idle');
     setLiveChoiceOpen(false);
     setIsLivePhotoMode(false);
+    setLiveBox(null);
     if (inputRef.current) inputRef.current.value = '';
   }
 
