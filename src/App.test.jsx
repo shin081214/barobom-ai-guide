@@ -9,6 +9,16 @@ vi.mock('./lib/feedback.js', () => ({
   resetSession: vi.fn(),
   identifyDevice: vi.fn().mockResolvedValue(null),
 }));
+vi.mock('./lib/liveVoice.js', () => ({
+  startLiveSession: vi.fn(() => ({
+    speak: vi.fn().mockResolvedValue(),
+    speakWithVision: vi.fn().mockResolvedValue(),
+    mute: vi.fn(),
+    unmute: vi.fn(),
+    stop: vi.fn(),
+    get state() { return 'disconnected'; },
+  })),
+}));
 
 function installSpeechRecognition(transcript) {
   class FakeSpeechRecognition {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getContainedImageBounds } from './lib/imageBounds.js';
 import { getAnonymousId } from './lib/anonId.js';
 import { publishEvent, resetSession, identifyDevice } from './lib/feedback.js';
+import { startLiveSession } from './lib/liveVoice.js';
 import {
   ArrowLeft,
   Camera,
@@ -149,6 +150,10 @@ export default function App() {
   const [customLoading, setCustomLoading] = useState(false);
   const [customError, setCustomError] = useState('');
   const [deviceInfo, setDeviceInfo] = useState(null);
+  const [liveSession, setLiveSession] = useState(null);
+  const [liveState, setLiveState] = useState('idle');
+  const [imageBase64, setImageBase64] = useState(null);
+  const [imageMimeType, setImageMimeType] = useState('image/jpeg');
   const inputRef = useRef(null);
   const goalInputRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -164,9 +169,62 @@ export default function App() {
     getAnonymousId();
   }, []);
 
+  // Cleanup live session on unmount
+  useEffect(() => () => {
+    if (liveSession) liveSession.stop();
+  }, [liveSession]);
+
+  async function fetchGeminiApiKey() {
+    try { const res = await fetch('/api/live-key'); return (await res.json()).key || ''; }
+    catch { return ''; }
+  }
+
+  function createLiveSession(apiKey) {
+    const prompt = selectedGoal
+      ? `당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자는 지금 "${selectedGoal.label}"을(를) 하고 있습니다. 현재 단계: "${step?.text || ''}". 친절하고 쉬운 한국어로 짧게 대답하세요.`
+      : '당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자가 카메라 속 화면에 대해 물어보면 친절하고 쉬운 한국어로 대답하세요.';
+    return startLiveSession(apiKey, {
+      systemPrompt: prompt,
+      onResponse: () => {},
+      onTranscription: ({speaker, text}) => {
+        if (speaker === 'user') console.log('[live] 🎤', text);
+        else console.log('[live] 🤖', text);
+      },
+      onStateChange: (newState) => {
+        if (newState === 'ready' || newState === 'listening') setLiveState('listening');
+        else if (newState === 'muted') setLiveState('muted');
+        else if (newState === 'idle' || newState === 'error') setLiveState('idle');
+        else if (newState === 'connecting') setLiveState('connecting');
+      },
+      onError: (err) => { console.warn('[live]', err.message); setLiveState('idle'); },
+    });
+  }
+
+  async function toggleLiveVision() {
+    if (liveState === 'idle') {
+      const apiKey = await fetchGeminiApiKey();
+      if (!apiKey) { alert('Gemini API 키가 설정되지 않았습니다.'); return; }
+      const session = createLiveSession(apiKey);
+      setLiveSession(session);
+      setLiveState('connecting');
+      console.log('[app] starting unified Live API vision mode, imageBase64:', !!imageBase64, 'imageMimeType:', imageMimeType);
+      await session.speakWithVision(imageBase64, imageMimeType);
+    } else if (liveState === 'listening') {
+      if (liveSession) liveSession.mute();
+    } else if (liveState === 'muted') {
+      if (liveSession) liveSession.unmute();
+    }
+  }
+
+  function stopLiveVoice() {
+    if (liveSession) { liveSession.stop(); setLiveSession(null); }
+    setLiveState('idle');
+  }
+
   useEffect(() => () => {
     if (imageUrl) URL.revokeObjectURL(imageUrl);
   }, [imageUrl]);
+
 
   const progress = useMemo(() => totalSteps ? ((stepIndex + 1) / totalSteps) * 100 : 0, [stepIndex, totalSteps]);
 
@@ -187,6 +245,8 @@ export default function App() {
       const mimeType = header.match(/data:(.*?);base64/)?.[1] || file.type || 'image/jpeg';
       const payload = { image, mimeType, requestedGoal: customRequest.trim() };
       setAnalysisPayload(payload);
+      setImageBase64(image);
+      setImageMimeType(mimeType);
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -349,6 +409,7 @@ export default function App() {
   }
 
   function reset() {
+    stopLiveVoice();
     publishEvent('guide_abandoned');
     resetSession();
     window.speechSynthesis?.cancel?.();
@@ -572,7 +633,31 @@ export default function App() {
                 <div className="instruction-body">
                   <span className="instruction-number">{stepIndex + 1}</span>
                   <h2>{step.text}</h2>
-                  <button className="listen-button" type="button" onClick={() => { speak(step.text); publishEvent('step_repeated', { step: stepIndex + 1 }); }}><Volume2 size={22} /> 다시 듣기</button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="listen-button" type="button" onClick={() => { speak(step.text); publishEvent('step_repeated', { step: stepIndex + 1 }); }}><Volume2 size={22} /> 다시 듣기</button>{' '}
+                  <button
+                    className={`live-vision-button ${liveState !== 'idle' ? 'is-active' : ''}`}
+                    type="button"
+                    onClick={toggleLiveVision}
+                    style={{
+                      background: liveState === 'listening' ? '#dc3545' : liveState === 'muted' ? '#ffc107' : liveState === 'connecting' ? '#17a2b8' : '#6f42c1',
+                      color: '#fff', border: 'none', borderRadius: 12, padding: '10px 18px',
+                      fontSize: 15, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <Mic size={20} />
+                    {liveState === 'idle' && '음성으로 물어보기'}
+                    {liveState === 'connecting' && '연결 중...'}
+                    {liveState === 'listening' && '듣는 중 (눌러서 음소거)'}
+                    {liveState === 'muted' && '음소거 됨 (눌러서 다시 듣기)'}
+                  </button>
+                  {liveState !== 'idle' && (
+                    <button type="button" onClick={stopLiveVoice} style={{
+                      background: '#6c757d', color: '#fff', border: 'none', borderRadius: 12,
+                      padding: '10px 14px', fontSize: 14, cursor: 'pointer',
+                    }}>✕ 종료</button>
+                  )}
+                  </div>
                 </div>
                 <div className="guide-controls">
                   <button className="previous-button" type="button" onClick={() => { setStepIndex((index) => Math.max(0, index - 1)); publishEvent('step_back', { step: stepIndex }); }} disabled={stepIndex === 0}><ChevronLeft /> 이전</button>
