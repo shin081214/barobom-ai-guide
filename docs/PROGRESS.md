@@ -4,6 +4,7 @@
 
 | 커밋 | 내용 |
 |---|---|
+| `73cae80` | feat(live): render live camera feed on the screen during Live API session |
 | `ad35e2b` | fix(live): add robustness guard and percentage clamping to parseBoxFromText |
 | `b4f4211` | feat(live): update Gemini Live API system prompt and refactor sessions to createLiveSession |
 | `46cedd4` | feat(live): integrate liveBox state into VisualGuide for Live API mode |
