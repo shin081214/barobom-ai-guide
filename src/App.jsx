@@ -6,6 +6,8 @@ import { getAnonymousId } from './lib/anonId.js';
 import { publishEvent, resetSession, identifyDevice, reportObservation } from './lib/feedback.js';
 import { startLiveSession } from './lib/liveVoice.js';
 import { fetchSkills, fetchObservations } from './lib/skillsApi.js';
+import { getConsent, setConsent } from './lib/consent.js';
+
 import {
   ArrowLeft,
   Camera,
@@ -158,6 +160,7 @@ export default function App() {
   const [imageMimeType, setImageMimeType] = useState('image/jpeg');
   const [skillsData, setSkillsData] = useState([]);
   const [obsData, setObsData] = useState([]);
+  const [consent, setConsentState] = useState(() => getConsent());
   const inputRef = useRef(null);
   const goalInputRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -172,6 +175,11 @@ export default function App() {
     // Initialize persistent anonymous ID for telemetry (M1)
     getAnonymousId();
   }, []);
+
+  function handleConsentChange(value) {
+    setConsentState(value);
+    setConsent(value);
+  }
 
   // Cleanup live session on unmount
   useEffect(() => () => {
@@ -525,7 +533,7 @@ export default function App() {
             <span aria-live="polite"><b>가</b><small>{textScaleLabel}</small></span>
             <button type="button" aria-label="글자 크게" onClick={() => setTextScale((value) => Math.min(2, value + 1))} disabled={textScale === 2}><Plus size={18} /></button>
           </div>
-          <span className="privacy"><ShieldCheck size={17} /> 사진은 저장하지 않아요</span>
+          <span className="privacy"><ShieldCheck size={17} /> {consent ? '사진은 마스킹 후 개선에 쓰여요' : '사진은 저장하지 않아요'}</span>
         </div>
       </header>
 
@@ -554,6 +562,18 @@ export default function App() {
                   </button>
                 </div>
                 {customError && <p className="voice-message is-error" role="alert">{customError}</p>}
+                <div className="consent-checkbox-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 16, width: '100%', justifyContent: 'flex-start' }}>
+                  <input
+                    id="consent-checkbox"
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => handleConsentChange(e.target.checked)}
+                    style={{ width: 20, height: 20, cursor: 'pointer' }}
+                  />
+                  <label htmlFor="consent-checkbox" style={{ fontSize: 15, cursor: 'pointer', color: '#4a5568' }}>
+                    더 나은 안내를 위해 사진 제공에 동의합니다 (선택)
+                  </label>
+                </div>
                 <button type="submit" className="primary-button intent-next">
                   다음 단계 <ChevronRight size={20} />
                 </button>

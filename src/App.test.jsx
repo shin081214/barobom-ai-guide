@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import App from './App.jsx';
@@ -243,3 +243,40 @@ test('사진을 찍기 전에 뒤로 가서 하고 싶은 일을 수정할 수 �
   const request = JSON.parse(global.fetch.mock.calls[0][1].body);
   expect(request.requestedGoal).toBe('탈수만 하기');
 });
+
+test('개인정보 동의 흐름이 체크박스 및 헤더 텍스트와 정상적으로 연동된다', async () => {
+  const user = userEvent.setup();
+  
+  // 1. 초기 렌더링 (동의하지 않음)
+  localStorage.removeItem('barobom_user_consent');
+  render(<App />);
+  
+  const checkbox = screen.getByRole('checkbox', { name: '더 나은 안내를 위해 사진 제공에 동의합니다 (선택)' });
+  expect(checkbox).not.toBeChecked();
+  expect(screen.getByText('사진은 저장하지 않아요')).toBeInTheDocument();
+  expect(screen.queryByText('사진은 마스킹 후 개선에 쓰여요')).not.toBeInTheDocument();
+
+  // 2. 체크박스 체크 -> 헤더 변경 및 localStorage 저장
+  await user.click(checkbox);
+  expect(checkbox).toBeChecked();
+  expect(screen.getByText('사진은 마스킹 후 개선에 쓰여요')).toBeInTheDocument();
+  expect(screen.queryByText('사진은 저장하지 않아요')).not.toBeInTheDocument();
+  expect(localStorage.getItem('barobom_user_consent')).toBe('true');
+
+  // 3. 체크박스 체크 해제 -> 헤더 원복 및 localStorage 저장
+  await user.click(checkbox);
+  expect(checkbox).not.toBeChecked();
+  expect(screen.getByText('사진은 저장하지 않아요')).toBeInTheDocument();
+  expect(screen.queryByText('사진은 마스킹 후 개선에 쓰여요')).not.toBeInTheDocument();
+  expect(localStorage.getItem('barobom_user_consent')).toBe('false');
+});
+
+test('localStorage에 이미 true로 저장된 상태에서 렌더링 시 동의 상태가 적용된다', async () => {
+  localStorage.setItem('barobom_user_consent', 'true');
+  render(<App />);
+  
+  const checkbox = screen.getByRole('checkbox', { name: '더 나은 안내를 위해 사진 제공에 동의합니다 (선택)' });
+  expect(checkbox).toBeChecked();
+  expect(screen.getByText('사진은 마스킹 후 개선에 쓰여요')).toBeInTheDocument();
+});
+
