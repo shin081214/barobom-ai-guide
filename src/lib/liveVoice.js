@@ -254,6 +254,8 @@ export function startLiveSession(apiKey, opts = {}) {
             activityHandling: 'ACTIVITY_HANDLING_UNSPECIFIED',
             turnCoverage: 'TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO',
           },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
         },
       }));
     };
