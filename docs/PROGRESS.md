@@ -4,6 +4,10 @@
 
 | 커밋 | 내용 |
 |---|---|
+| `ad35e2b` | fix(live): add robustness guard and percentage clamping to parseBoxFromText |
+| `b4f4211` | feat(live): update Gemini Live API system prompt and refactor sessions to createLiveSession |
+| `46cedd4` | feat(live): integrate liveBox state into VisualGuide for Live API mode |
+| `7658bf1` | feat(live): add liveBox state and coordinate parsing in Live API |
 | `b6c5ef9` | feat(live): add choice flow for live AI (camera vs static photo) |
 | `a3293e6` | feat(consent): add consent flow UI and local persistence |
 | `76985b9` | refactor(ui): remove 🧠 스킬 현황 button — footer 링크로만 진입 |
