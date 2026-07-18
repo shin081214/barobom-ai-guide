@@ -84,44 +84,87 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
     const video = videoRef.current;
     if (!frame) return;
 
-    const frameRect = frame.getBoundingClientRect();
-    const containerWidth = frame.clientWidth || frameRect.width;
-    const containerHeight = frame.clientHeight || frameRect.height;
-    let naturalWidth = 0;
-    let naturalHeight = 0;
+    const containerWidth = frame.clientWidth;
+    const containerHeight = frame.clientHeight;
+    if (!containerWidth || !containerHeight) return;
 
     if (imageUrl && image) {
-      naturalWidth = image.naturalWidth;
-      naturalHeight = image.naturalHeight;
-    } else if (videoStream && video) {
-      naturalWidth = video.videoWidth;
-      naturalHeight = video.videoHeight;
+      // 사진 분석 경로: intrinsic 비율로 contain 영역 계산 (기존 동작).
+      const bounds = getContainedImageBounds({
+        containerWidth,
+        containerHeight,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+      });
+      setMediaBounds(bounds ? { ...bounds, source: imageUrl } : null);
+      return;
     }
 
-    const bounds = getContainedImageBounds({
-      containerWidth,
-      containerHeight,
-      naturalWidth,
-      naturalHeight,
-    });
-    setMediaBounds(bounds ? { ...bounds, source: imageUrl || 'video' } : null);
+    if (videoStream && video) {
+      // 라이브 카메라 경로: video element가 container 안에서 실제로 차지하는
+      // 사각형을 그대로 신뢰한다. intrinsic(videoWidth/Height)만으로 contain
+      // 영역을 계산하면, 안드로이드 후면 카메라처럼 landscape intrinsics을
+      // portrait element로 표시하는 경우 사용자 눈에 보이는 영상과 박스가
+      // 어긋난다. element.clientWidth/Height는 object-fit: contain 적용 후의
+      // 실제 렌더 사이즈라서 박스와 정확히 일치한다.
+      const videoRect = video.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+      const displayWidth = videoRect.width;
+      const displayHeight = videoRect.height;
+      if (displayWidth < 1 || displayHeight < 1) {
+        // 아직 layout이 잡히기 전 — 박스를 그리지 않는다.
+        setMediaBounds(null);
+        return;
+      }
+      const bounds = getContainedImageBounds({
+        containerWidth,
+        containerHeight,
+        displayWidth,
+        displayHeight,
+      });
+      setMediaBounds(bounds ? { ...bounds, source: 'video' } : null);
+      return;
+    }
+
+    // image/video 둘 다 없는 케이스 (라이브 모드 placeholder).
+    setMediaBounds(null);
   }, [imageUrl, videoStream]);
 
   useEffect(() => {
     const frame = frameRef.current;
+    const video = videoRef.current;
+    const image = imageRef.current;
     const observer = typeof ResizeObserver === 'function' && frame
       ? new ResizeObserver(measureMedia)
       : null;
     observer?.observe(frame);
+    // video element는 frame 안에 있지만 srcObject attach 직후 또는
+    // 백그라운드↔포그라운드 전환 시 frame의 resize 이벤트가 안 오고
+    // video 자체만 reflow되는 경우가 있다 (특히 Android Chrome). 그래서
+    // video element도 별도로 관찰한다.
+    if (video && observer) {
+      observer.observe(video);
+    }
     window.addEventListener('resize', measureMedia);
 
-    if (imageUrl && imageRef.current?.complete) {
+    if (imageUrl && image?.complete) {
       measureMedia();
     }
+    // video element가 mount 직후 srcObject가 attach되기 전일 수 있으니,
+    // 1초 동안 짧은 간격으로 재측정해서 카메라가 늦게 잡혀도 박스를 그린다.
+    let attempts = 0;
+    const warmup = videoStream
+      ? window.setInterval(() => {
+        attempts += 1;
+        measureMedia();
+        if (attempts >= 6) window.clearInterval(warmup);
+      }, 160)
+      : null;
 
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', measureMedia);
+      if (warmup !== null) window.clearInterval(warmup);
     };
   }, [imageUrl, videoStream, measureMedia]);
 

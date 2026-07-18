@@ -36,3 +36,29 @@ test('크기가 아직 측정되지 않았으면 좌표를 만들지 않는다',
     naturalHeight: 600,
   })).toBeNull();
 });
+
+test('displayWidth/Height가 주어지면 그것을 그대로 신뢰한다 (회전된 카메라 보정)', () => {
+  // 카메라 intrinsic이 1920x1080이라도 실제 화면에 표시된 사각형이
+  // portrait 프레임 안의 360x540 사각형이라면 그 크기로 좌표를 잡아야 한다.
+  expect(getContainedImageBounds({
+    containerWidth: 360,
+    containerHeight: 640,
+    naturalWidth: 1920,
+    naturalHeight: 1080,
+    displayWidth: 360,
+    displayHeight: 540,
+  })).toEqual({ left: 0, top: 0, width: 360, height: 540 });
+});
+
+test('displayWidth가 0이면 자연 intrinsic fallback으로 contain 영역을 계산한다', () => {
+  // 영상 element가 mount 직후 clientWidth=0인 동안에도, videoWidth/Height가
+  // 잡혀 있으면 intrinsic 비율로 contain 영역을 만들어서 박스를 그려야 한다.
+  expect(getContainedImageBounds({
+    containerWidth: 360,
+    containerHeight: 640,
+    naturalWidth: 1920,
+    naturalHeight: 1080,
+    displayWidth: 0,
+    displayHeight: 540,
+  })).toEqual({ left: 0, top: 218.75, width: 360, height: 202.5 });
+});
