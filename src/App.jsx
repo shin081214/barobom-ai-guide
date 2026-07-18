@@ -257,6 +257,7 @@ export default function App() {
 반드시 사용자가 볼 수 있는 기기 화면 내부의 해당 컴포넌트 위치에 맞추어 정확하게 좌표를 추정해 제공하십시오. 일반적인 인사나 일상 대화, 기기 위치를 가리키지 않는 응답에서는 절대로 이 태그를 포함하지 마십시오.`;
 
     let accumulatedText = '';
+    let accumulatedModelText = '';
 
     return startLiveSession(apiKey, {
       systemPrompt: prompt,
@@ -272,10 +273,18 @@ export default function App() {
           console.log('[live] 🎤', text);
           if (text && text.trim()) {
             accumulatedText = '';
+            accumulatedModelText = '';
             setLiveBox(null);
           }
         } else {
           console.log('[live] 🤖', text);
+          if (text) {
+            accumulatedModelText += text;
+            const box = parseBoxFromText(accumulatedModelText);
+            if (box) {
+              setLiveBox(box);
+            }
+          }
         }
       },
       onStateChange: (newState) => {
