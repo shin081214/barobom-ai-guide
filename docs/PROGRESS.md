@@ -23,6 +23,9 @@
 
 ## 백엔드 (`192.168.45.155:8000` — barobom-backend)
 
+**GitHub:** `https://github.com/amanhasfallenintoriverincity/barobom-backend`  
+**커밋:** `e8c0f79` — 35 files, 1671 lines
+
 ### 신규 파일 (서브에이전트가 생성)
 | 파일 | 용도 |
 |---|---|
