@@ -1,14 +1,17 @@
 # Barobom SKILL.md Self-Improvement Implementation Plan
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
+>
+> **⚠️ STATUS (2026-07-19): M0~M5 완료, M6 진행 예정. 최신 진행상황은 `docs/PROGRESS.md` 참조.**
 
 **Goal:** 처음 보는 제품도 AI가 안내할 수 있도록, 안내 세션에서 검증된 사용 지식을 제품별 `SKILL.md`로 누적·평가·게시·재사용하는 자기 발전 시스템을 단계적으로 구축한다.
 
-**Architecture:** Next.js 클라이언트는 그대로 두고, 분석/학습 파이프라인을 별도 **FastAPI** 서비스로 분리한다. **Supabase PostgreSQL + pgvector**가 제품·Skill 버전·세션·관찰의 Source of Truth이고, **Supabase Storage**가 원본 이미지를 보관한다. Skill 후보 생성·평가는 **Celery Worker**로 비동기 처리하고, AI의 출력은 **draft → candidate → evaluating → review_required → published → deprecated** 상태 머신을 거쳐서만 운영 Skill로 승격된다.
+**Architecture:** Next.js 클라이언트는 그대로 두고, 분석/학습 파이프라인을 별도 **FastAPI** 서비스로 분리한다. ~~Supabase PostgreSQL + pgvector~~ **→ 현재 SQLite + ChromaDB 사용 중** (향후 Supabase 마이그레이션). Skill 후보 생성·평가는 ~~Celery Worker~~ **→ 동기 FastAPI 핸들러**로 처리, AI의 출력은 **draft → published → deprecated** 상태 머신을 거친다.
 
-**Tech Stack:** Next.js 16 (App Router) · React 19 · FastAPI · SQLAlchemy 2 + Alembic · Pydantic v2 · Supabase PostgreSQL 15 + pgvector · Supabase Storage · Upstash Redis · Celery 5 · Google Gemini Vision (`generateContent`) · Langfuse · Sentry · Vitest (FE) · Pytest (BE) · GitHub Actions
+**Actual Tech Stack (deployed):** Next.js 16 (App Router) · React 19 · FastAPI · SQLAlchemy 2 · SQLite · ChromaDB · Gemini Vision (`generateContent` + Live API WebSocket) · Vitest (FE)
 
 **Note on model metadata:** This plan is authored under active model **MiniMax-M3** (provider: `custom:jitda`).
+**Updated:** 2026-07-19 — M0~M5 완료, 14개 서브에이전트 + Live API 통합 + Gemini 키 교체 완료.
 
 ---
 
