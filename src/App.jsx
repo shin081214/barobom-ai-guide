@@ -497,7 +497,7 @@ export default function App() {
     setStepIndex(0);
     setCustomOpen(false);
     setStage('guide');
-    publishEvent('guide_started', { goal: goal.label });
+    publishEvent('guide_started', { goal: goal.label, device_id: deviceInfo?.id });
   }
 
   function openCustomRequest() {
@@ -605,19 +605,19 @@ export default function App() {
 
   function nextStep() {
     if (isLastStep) {
-      publishEvent('goal_completed', { goal: selectedGoal?.label, totalSteps });
+      publishEvent('goal_completed', { goal: selectedGoal?.label, totalSteps, device_id: deviceInfo?.id });
       setStage('done');
     } else {
       const next = stepIndex + 1;
       setStepIndex(next);
-      publishEvent('step_shown', { step: next + 1, totalSteps });
-      publishEvent('screen_changed', { step: next + 1, totalSteps });
+      publishEvent('step_shown', { step: next + 1, totalSteps, device_id: deviceInfo?.id });
+      publishEvent('screen_changed', { step: next + 1, totalSteps, device_id: deviceInfo?.id });
     }
   }
 
   function reset() {
     stopLiveVoice();
-    publishEvent('guide_abandoned');
+    publishEvent('guide_abandoned', { device_id: deviceInfo?.id });
     resetSession();
     window.speechSynthesis?.cancel?.();
     recognitionRef.current?.stop?.();
@@ -904,9 +904,9 @@ export default function App() {
                   <span className="instruction-number">{stepIndex + 1}</span>
                   <h2>{step.text}</h2>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button className="listen-button" type="button" onClick={() => { speak(step.text); publishEvent('step_repeated', { step: stepIndex + 1 }); }}><Volume2 size={22} /> 다시 듣기</button>{' '}
+                  <button className="listen-button" type="button" onClick={() => { speak(step.text); publishEvent('step_repeated', { step: stepIndex + 1, device_id: deviceInfo?.id }); }}><Volume2 size={22} /> 다시 듣기</button>{' '}
                   <button className="wrong-report-button" type="button" onClick={async () => {
-                    publishEvent('user_reported_wrong', { step: stepIndex + 1 });
+                    publishEvent('user_reported_wrong', { step: stepIndex + 1, device_id: deviceInfo?.id });
                     if (deviceInfo?.id) {
                       try {
                         await reportObservation({
@@ -945,7 +945,7 @@ export default function App() {
                 </div>
                 {selectedGoal?.id !== 'goal-live' && (
                 <div className="guide-controls">
-                  <button className="previous-button" type="button" onClick={() => { setStepIndex((index) => Math.max(0, index - 1)); publishEvent('step_back', { step: stepIndex }); publishEvent('screen_changed', { step: stepIndex, totalSteps }); }} disabled={stepIndex === 0}><ChevronLeft /> 이전</button>
+                  <button className="previous-button" type="button" onClick={() => { setStepIndex((index) => Math.max(0, index - 1)); publishEvent('step_back', { step: stepIndex, device_id: deviceInfo?.id }); publishEvent('screen_changed', { step: stepIndex, totalSteps, device_id: deviceInfo?.id }); }} disabled={stepIndex === 0}><ChevronLeft /> 이전</button>
                   <button className="next-button" type="button" onClick={nextStep}>{isLastStep ? '다 했어요' : '다음 단계'} <ChevronRight /></button>
                 </div>
                 )}
@@ -974,17 +974,17 @@ export default function App() {
           <section className="workspace skills-dashboard">
             <div className="workspace-head">
               <button className="back-button" type="button" onClick={() => setStage('guide')}><ArrowLeft size={20} /> 안내로 돌아가기</button>
-              <div><span className="step-label">🧠 Skill 자기 개선 현황</span><h1>AI가 배운 내용</h1><p>사용자 피드백을 바탕으로 Gemini가 Skill을 개선하는 과정입니다.</p></div>
+              <div><span className="step-label">🧠 Skill 자율 자기 개선 현황</span><h1>AI 자율 학습 엔진</h1><p>사용자의 실제 안내 진행 로그를 AI가 스스로 분석하여 더 똑똑한 가이드를 만들어내는 과정입니다.</p></div>
             </div>
 
             <div style={{ display: 'grid', gap: 16, maxWidth: 860 }}>
               {/* Observations summary */}
               <div style={{ background: '#f0f7ff', border: '1px solid #b8d8ff', borderRadius: 16, padding: 20 }}>
                 <h3 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 24 }}>📊</span> 수집된 사용자 피드백
+                  <span style={{ fontSize: 24 }}>🤖</span> AI 자율 진단 및 세션 분석 결과
                 </h3>
                 {obsData.length === 0 ? (
-                  <p style={{ color: '#666', margin: 0 }}>아직 수집된 피드백이 없습니다. 사용자가 &quot;잘못됐어요&quot; 버튼을 누르면 여기에 쌓입니다.</p>
+                  <p style={{ color: '#666', margin: 0 }}>아직 분석된 세션 결과가 없습니다. 사용자가 안내를 진행하거나 피드백이 발생하면 자동으로 자율 진단이 동작합니다.</p>
                 ) : (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {obsData.map((o) => (
@@ -993,22 +993,22 @@ export default function App() {
                           background: o.type === 'wrong_step' ? '#fde8e8' : o.type === 'missing_step' ? '#fef3c7' : '#d1fae5',
                           color: o.type === 'wrong_step' ? '#9b1c1c' : o.type === 'missing_step' ? '#92400e' : '#065f46',
                           padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                        }}>{o.type === 'wrong_step' ? '❌ 오류' : o.type === 'missing_step' ? '➕ 누락' : '✅ 정확'}</span>
+                        }}>{o.type === 'wrong_step' ? '❌ 마찰감지' : o.type === 'missing_step' ? '➕ 보강필요' : '✅ 자율개선'}</span>
                         <span style={{ color: '#666', fontSize: 12 }}>step {o.step_index}</span>
-                        <span style={{ flex: 1 }}>{o.description}</span>
+                        <span style={{ flex: 1, fontWeight: o.description.includes('[AI 자율') ? 600 : 400 }}>{o.description}</span>
                       </div>
                     ))}
                   </div>
                 )}
                 <p style={{ margin: '12px 0 0', fontSize: 13, color: '#666' }}>
-                  💡 3건 이상 쌓이면 Gemini가 자동으로 Skill 초안을 생성합니다.
+                  💡 사용자가 안내를 마친 즉시 AI가 모든 행동 로그(뒤로가기, 반복재생, 이탈 등)를 자율 분석하여 문제점을 스스로 교정합니다.
                 </p>
               </div>
 
               {/* Skills list */}
               <div style={{ background: 'white', border: '1px solid #e1e8e3', borderRadius: 16, padding: 20 }}>
                 <h3 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 24 }}>📚</span> Skill 버전 히스토리
+                  <span style={{ fontSize: 24 }}>📚</span> 자율 개선 Skill 버전 히스토리
                 </h3>
                 {skillsData.length === 0 ? (
                   <p style={{ color: '#666', margin: 0 }}>백엔드에서 데이터를 불러오는 중...</p>
@@ -1026,13 +1026,13 @@ export default function App() {
                             padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
                             background: s.status === 'published' ? '#16a34a' : s.status === 'deprecated' ? '#6b7280' : '#d97706',
                             color: 'white',
-                          }}>{s.status === 'published' ? '✅ 게시됨' : s.status === 'deprecated' ? '🗄️ 폐기됨' : '📝 초안'}</span>
+                          }}>{s.status === 'published' ? '✅ 자율배포' : s.status === 'deprecated' ? '🗄️ 폐기됨' : '📝 자율검증'}</span>
                           <span style={{ color: '#888', fontSize: 12 }}>v{s.version}</span>
                         </div>
                         <div style={{ fontSize: 13, color: '#666' }}>
-                          {s.status === 'published' && '현재 사용자에게 제공되는 Skill입니다.'}
-                          {s.status === 'draft' && '아직 평가를 통과하지 못했습니다. &quot;주의사항&quot; 섹션 등 필수 조건을 확인하세요.'}
-                          {s.status === 'deprecated' && '새 버전이 게시되어 더 이상 사용되지 않습니다.'}
+                          {s.status === 'published' && 'AI가 자율 배포하여 현재 사용자에게 실시간 제공되는 최신 가이드입니다.'}
+                          {s.status === 'draft' && '자율 생성된 가이드 초안입니다. 검증 게이트를 통과해야 최종 배포됩니다.'}
+                          {s.status === 'deprecated' && '더 똑똑한 새 자율가이드 버전이 게시되어 폐기되었습니다.'}
                         </div>
                       </div>
                     ))}
@@ -1041,7 +1041,7 @@ export default function App() {
               </div>
 
               <p style={{ fontSize: 12, color: '#999', textAlign: 'center', margin: '8px 0' }}>
-                파이프라인: 잘못됐어요 → 관찰 3건 → Gemini 초안 → 평가(100점) → 게시 → ChromaDB 갱신
+                파이프라인: 세션 완료 (또는 피드백 발생) → AI 자율 결과 분석 → 가이드 문제 진단 → Skill 초안 자동 생성 → 자율 평가 및 개선 → 실시간 게시 및 ChromaDB 반영
               </p>
             </div>
           </section>
