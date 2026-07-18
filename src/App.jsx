@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getContainedImageBounds } from './lib/imageBounds.js';
 import { getAnonymousId } from './lib/anonId.js';
-import { publishEvent, resetSession, identifyDevice } from './lib/feedback.js';
+import { publishEvent, resetSession, identifyDevice, reportObservation } from './lib/feedback.js';
 import { startLiveSession } from './lib/liveVoice.js';
 import {
   ArrowLeft,
@@ -663,7 +663,20 @@ export default function App() {
                   <h2>{step.text}</h2>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button className="listen-button" type="button" onClick={() => { speak(step.text); publishEvent('step_repeated', { step: stepIndex + 1 }); }}><Volume2 size={22} /> 다시 듣기</button>{' '}
-                  <button className="wrong-report-button" type="button" onClick={() => { publishEvent('user_reported_wrong', { step: stepIndex + 1 }); alert('피드백을 보내주셔서 감사합니다.'); }} style={{ background: 'transparent', color: '#dc3545', border: '1px solid #dc3545', borderRadius: 12, padding: '10px 18px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>잘못됐어요</button>{' '}
+                  <button className="wrong-report-button" type="button" onClick={async () => {
+                    publishEvent('user_reported_wrong', { step: stepIndex + 1 });
+                    if (deviceInfo?.id) {
+                      try {
+                        await reportObservation({
+                          deviceId: deviceInfo.id,
+                          observationType: 'wrong_step',
+                          stepIndex: stepIndex + 1,
+                          description: `"${selectedGoal?.label}" 안내 중 ${stepIndex + 1}단계 오류 신고`,
+                        });
+                      } catch {}
+                    }
+                    alert('피드백을 보내주셔서 감사합니다. 더 나은 안내를 위해 반영하겠습니다.');
+                  }} style={{ background: 'transparent', color: '#dc3545', border: '1px solid #dc3545', borderRadius: 12, padding: '10px 18px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>잘못됐어요</button>{' '}
                   <button
                     className={`live-vision-button ${liveState !== 'idle' ? 'is-active' : ''}`}
                     type="button"

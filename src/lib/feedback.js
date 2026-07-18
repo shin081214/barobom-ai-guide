@@ -73,3 +73,30 @@ export async function identifyDevice(imageBase64, mimeType = 'image/jpeg') {
     return null;
   }
 }
+
+/**
+ * Report a user observation about a wrong/missing step.
+ */
+export async function reportObservation({ deviceId, sessionId, observationType, description, stepIndex }) {
+  try {
+    const response = await fetch(`${BACKEND_URL}/v1/observations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: deviceId,
+        session_id: sessionId || currentSessionId || 'unknown',
+        observation_type: observationType,
+        description: description || '',
+        step_index: stepIndex,
+      }),
+    });
+    if (!response.ok) {
+      console.warn(`[observation] request failed (${response.status})`);
+      return null;
+    }
+    return await response.json();
+  } catch (err) {
+    console.warn('[observation] failed:', err.message);
+    return null;
+  }
+}
