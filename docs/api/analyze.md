@@ -2,7 +2,7 @@
 
 AI 이미지 분석 API. Gemini Vision 모델을 사용해 사진 속 인터페이스(키오스크·앱·가전제품)를 분석하고, 사용자가 목표를 달성하기 위해 눌러야 할 위치를 단계별로 안내하는 과제(goal) 목록을 반환합니다.
 
-> **버전**: 0.2.0 | **유지보수자**: `app/api/analyze/route.js` | **최종 갱신**: 2026-07-18
+> **버전**: 0.2.1 | **유지보수자**: `app/api/analyze/route.js` | **최종 갱신**: 2026-07-19
 
 ## 요청
 
@@ -103,12 +103,13 @@ Content-Type: application/json
 | `400` | `"요청 형식이 올바르지 않습니다."` | — | Body가 JSON이 아님 |
 | `400` | `"분석할 사진이 없습니다."` | — | `image` 필드 누락 또는 string 아님 |
 | `400` | `"이미지 파일만 분석할 수 있습니다."` | — | `mimeType`이 `"image/"`로 시작하지 않음 |
+| `429` | `"RATE_LIMITED"` | — | Gemini API 할당량 초과 (`Retry-After` 헤더 포함) |
 | `500` | `"사진 분석 중 문제가 생겼습니다."` | — | 예기치 않은 내부 오류 |
-| `502` | `"AI가 사진을 분석하지 못했습니다."` | — | Gemini API 호출 실패 |
+| `502` | `"AI가 사진을 분석하지 못했습니다."` | — | Gemini API 호출 실패 (429 제외) |
 | `503` | `"MISSING_CONFIG"` | `["GEMINI_API_KEY"]` | 필수 환경변수 누락 |
 
 ### 503 MISSING_CONFIG
-`REQUIRED_ENV` 목록(`GEMINI_API_KEY`, `FASTAPI_URL`) 중 하나라도 비어있거나 설정되지 않으면 **모든 요청에 대해** 503을 반환합니다. `missing` 배열로 누락된 키 이름을 명시하여 클라이언트가 진단할 수 있도록 합니다.
+`REQUIRED_ENV` 목록(`GEMINI_API_KEY`) 중 하나라도 비어있거나 설정되지 않으면 **모든 요청에 대해** 503을 반환합니다. `missing` 배열로 누락된 키 이름을 명시하여 클라이언트가 진단할 수 있도록 합니다.
 
 ```json
 {
@@ -117,9 +118,24 @@ Content-Type: application/json
 }
 ```
 
+### 429 RATE_LIMITED
+Gemini API가 할당량 초과(Quota exceeded)를 반환하면 429 상태 코드와 함께 클라이언트에 응답합니다. `Retry-After` 헤더에 재시도 가능한 초(5초 단위, 최소 5초)를 포함하며, 응답 본문에는 `retryAfter` 필드와 사용자 친화적인 메시지가 포함됩니다.
+
+```json
+{
+  "error": "RATE_LIMITED",
+  "message": "AI 사용량이 잠시 많아요. 30초 뒤에 다시 시도해주세요.",
+  "retryAfter": 30
+}
+```
+
+| 응답 헤더 | 설명 |
+|---|---|
+| `Retry-After` | 재시도까지 기다려야 할 초 (예: `30`) |
+
 ## Rate Limit
 
-현재 명시적 rate limit은 없습니다. Gemini API 자체의 free-tier 할당량(분당 요청 수)에 따라 제한됩니다.
+현재 명시적 rate limit은 없습니다. Gemini API 자체의 free-tier 할당량(분당 요청 수)에 따라 제한되며, 할당량 초과 시 429 RATE_LIMITED 응답이 반환됩니다.
 
 향후 API Gateway 도입 시 계획:
 - IP당 30 req/min 초과 시 `429` + `Retry-After` 헤더
@@ -129,9 +145,9 @@ Content-Type: application/json
 
 | 키 | 필수 | 기본값 | 설명 |
 |---|---|---|---|
-| `GEMINI_API_KEY` | ✅ | — | Gemini API 키 |
-| `FASTAPI_URL` | ✅ | — | M2+ AI 백엔드 주소 (현재는 검증 용도) |
-| `GEMINI_MODEL` |  | `"gemini-3.5-flash"` | Gemini 모델 이름 |
+| `GEMINI_API_KEY` | ✅ | — | Gemini API 키 **(유일한 필수 변수)** |
+| `GEMINI_MODEL` |  | `"gemini-3.5-flash"` | Gemini 모델 이름 (선택) |
+| `FASTAPI_URL` |  | — | M2+ AI 백엔드 주소 (선택, 향후 사용) |
 | `PORT` |  | 4173 | Vite dev 서버 포트 (Next.js와 무관) |
 
 환경변수는 `.env.local`에 설정하며, `.env.example`을 참고하세요.
@@ -153,5 +169,6 @@ Content-Type: application/json
 
 | 날짜 | 버전 | 변경 |
 |---|---|---|
+| 2026-07-19 | 0.2.1 | `FASTAPI_URL` 선택(향후 사용)으로 변경, 429 RATE_LIMITED 문서화, `GEMINI_MODEL` 선택 변수 명시 |
 | 2026-07-18 | 0.2.0 | `MISSING_CONFIG` 응답 추가, `FASTAPI_URL` 필수, bbox 정규화 문서화 |
 | 2026-07-17 | 0.1.0 | 최초 배포 (Gemini 키 503, 요청 검증, JSON 스키마) |
