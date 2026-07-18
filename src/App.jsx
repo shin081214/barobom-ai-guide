@@ -5,6 +5,7 @@ import { getContainedImageBounds } from './lib/imageBounds.js';
 import { getAnonymousId } from './lib/anonId.js';
 import { publishEvent, resetSession, identifyDevice, reportObservation } from './lib/feedback.js';
 import { startLiveSession } from './lib/liveVoice.js';
+import { fetchSkills, fetchObservations } from './lib/skillsApi.js';
 import {
   ArrowLeft,
   Camera,
@@ -155,6 +156,8 @@ export default function App() {
   const [liveState, setLiveState] = useState('idle');
   const [imageBase64, setImageBase64] = useState(null);
   const [imageMimeType, setImageMimeType] = useState('image/jpeg');
+  const [skillsData, setSkillsData] = useState([]);
+  const [obsData, setObsData] = useState([]);
   const inputRef = useRef(null);
   const goalInputRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -244,6 +247,18 @@ export default function App() {
   function stopLiveVoice() {
     if (liveSession) { liveSession.stop(); setLiveSession(null); }
     setLiveState('idle');
+  }
+
+  async function viewSkills() {
+    setStage('skills');
+    try {
+      const [skills, obs] = await Promise.all([
+        fetchSkills(),
+        fetchObservations(),
+      ]);
+      setSkillsData(skills);
+      setObsData(obs);
+    } catch { /* backend unreachable */ }
   }
 
   useEffect(() => () => {
@@ -703,6 +718,12 @@ export default function App() {
                       padding: '10px 14px', fontSize: 14, cursor: 'pointer',
                     }}>✕ 종료</button>
                   )}
+                  <button type="button" onClick={viewSkills} style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: '#fff', border: 'none', borderRadius: 12,
+                    padding: '10px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>🧠 스킬 현황</button>
                   </div>
                 </div>
                 <div className="guide-controls">
@@ -722,6 +743,83 @@ export default function App() {
             <h1>잘하셨어요!</h1>
             <span>{selectedGoal?.label} 안내를 모두 마쳤어요.</span>
             <div><button className="primary-button" type="button" onClick={reset}><Camera size={22} /> 다른 화면 찍기</button><button className="secondary-button" type="button" onClick={() => { setStepIndex(0); setStage('guide'); }}><RotateCcw size={20} /> 다시 보기</button></div>
+          </section>
+        )}
+
+        {stage === 'skills' && (
+          <section className="workspace skills-dashboard">
+            <div className="workspace-head">
+              <button className="back-button" type="button" onClick={() => setStage('guide')}><ArrowLeft size={20} /> 안내로 돌아가기</button>
+              <div><span className="step-label">🧠 Skill 자기 개선 현황</span><h1>AI가 배운 내용</h1><p>사용자 피드백을 바탕으로 Gemini가 Skill을 개선하는 과정입니다.</p></div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 16, maxWidth: 860 }}>
+              {/* Observations summary */}
+              <div style={{ background: '#f0f7ff', border: '1px solid #b8d8ff', borderRadius: 16, padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 24 }}>📊</span> 수집된 사용자 피드백
+                </h3>
+                {obsData.length === 0 ? (
+                  <p style={{ color: '#666', margin: 0 }}>아직 수집된 피드백이 없습니다. 사용자가 &quot;잘못됐어요&quot; 버튼을 누르면 여기에 쌓입니다.</p>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {obsData.map((o) => (
+                      <div key={o.id} style={{ background: 'white', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                        <span style={{
+                          background: o.type === 'wrong_step' ? '#fde8e8' : o.type === 'missing_step' ? '#fef3c7' : '#d1fae5',
+                          color: o.type === 'wrong_step' ? '#9b1c1c' : o.type === 'missing_step' ? '#92400e' : '#065f46',
+                          padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                        }}>{o.type === 'wrong_step' ? '❌ 오류' : o.type === 'missing_step' ? '➕ 누락' : '✅ 정확'}</span>
+                        <span style={{ color: '#666', fontSize: 12 }}>step {o.step_index}</span>
+                        <span style={{ flex: 1 }}>{o.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p style={{ margin: '12px 0 0', fontSize: 13, color: '#666' }}>
+                  💡 3건 이상 쌓이면 Gemini가 자동으로 Skill 초안을 생성합니다.
+                </p>
+              </div>
+
+              {/* Skills list */}
+              <div style={{ background: 'white', border: '1px solid #e1e8e3', borderRadius: 16, padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 24 }}>📚</span> Skill 버전 히스토리
+                </h3>
+                {skillsData.length === 0 ? (
+                  <p style={{ color: '#666', margin: 0 }}>백엔드에서 데이터를 불러오는 중...</p>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    {skillsData.map((s) => (
+                      <div key={s.id} style={{
+                        background: s.status === 'published' ? '#f0fdf4' : s.status === 'deprecated' ? '#f9fafb' : '#fffbeb',
+                        border: `1px solid ${s.status === 'published' ? '#86efac' : s.status === 'deprecated' ? '#d1d5db' : '#fde68a'}`,
+                        borderRadius: 12, padding: '14px 18px', opacity: s.status === 'deprecated' ? 0.6 : 1,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                          <span style={{ fontWeight: 800, fontSize: 16 }}>{s.title}</span>
+                          <span style={{
+                            padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                            background: s.status === 'published' ? '#16a34a' : s.status === 'deprecated' ? '#6b7280' : '#d97706',
+                            color: 'white',
+                          }}>{s.status === 'published' ? '✅ 게시됨' : s.status === 'deprecated' ? '🗄️ 폐기됨' : '📝 초안'}</span>
+                          <span style={{ color: '#888', fontSize: 12 }}>v{s.version}</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: '#666' }}>
+                          {s.status === 'published' && '현재 사용자에게 제공되는 Skill입니다.'}
+                          {s.status === 'draft' && '아직 평가를 통과하지 못했습니다. &quot;주의사항&quot; 섹션 등 필수 조건을 확인하세요.'}
+                          {s.status === 'deprecated' && '새 버전이 게시되어 더 이상 사용되지 않습니다.'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <p style={{ fontSize: 12, color: '#999', textAlign: 'center', margin: '8px 0' }}>
+                파이프라인: 잘못됐어요 → 관찰 3건 → Gemini 초안 → 평가(100점) → 게시 → ChromaDB 갱신
+              </p>
+            </div>
           </section>
         )}
       </main>
