@@ -756,12 +756,6 @@ export default function App() {
                       padding: '10px 14px', fontSize: 14, cursor: 'pointer',
                     }}>✕ 종료</button>
                   )}
-                  <button type="button" onClick={viewSkills} style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: '#fff', border: 'none', borderRadius: 12,
-                    padding: '10px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 6,
-                  }}>🧠 스킬 현황</button>
                   </div>
                 </div>
                 {selectedGoal?.id !== 'goal-live' && (
@@ -869,7 +863,7 @@ export default function App() {
         )}
       </main>
 
-      <footer><span>바로봄</span><p>모르는 화면 앞에서 혼자 고민하지 마세요.</p></footer>
+      <footer><span>바로봄</span><p>모르는 화면 앞에서 혼자 고민하지 마세요.</p><a href="#" role="button" onClick={(e) => { e.preventDefault(); viewSkills(); }} style={{ color: '#667eea', textDecoration: 'underline', fontSize: 13, marginTop: 6, display: 'inline-block' }}>🧠 AI 스킬 현황 보기</a></footer>
     </div>
   );
 }
