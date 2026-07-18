@@ -14,12 +14,22 @@ export function startLiveSession(apiKey, opts = {}) {
     onTranscription = () => {},
     onStateChange = () => {},
     onError = () => {},
+    onVideoStreamChange = () => {},
   } = opts;
 
   const url = `${WS_BASE}?key=${apiKey}`;
   let ws = null, state = 'idle';
   let micStream = null, micCtx = null, micWorklet = null;
-  let videoStream = null, videoEl = null, videoCanvas = null, videoTimer = null;
+
+  // Wrap videoStream so any change fires the React-side mirror callback.
+  // Without this, React cannot see the closure mutation and the <video>
+  // element stays in its initial empty state (fallback to DemoKiosk).
+  let videoStream = null;
+  function setVideoStream(next) {
+    videoStream = next;
+    try { onVideoStreamChange(next); } catch { /* listener may be torn down */ }
+  }
+  let videoEl = null, videoCanvas = null, videoTimer = null;
   let outCtx = null, outWorklet = null, outGain = null;
   let isMuted = false, setupOk = false, quit = null;
 
@@ -151,7 +161,7 @@ export function startLiveSession(apiKey, opts = {}) {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('이 브라우저에서는 카메라를 사용할 수 없습니다. HTTPS 또는 localhost에서 열어주세요.');
     }
-    videoStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
         width: { ideal: 640, max: 1280 },
@@ -159,7 +169,8 @@ export function startLiveSession(apiKey, opts = {}) {
       },
       audio: false,
     });
-    return videoStream;
+    setVideoStream(stream);
+    return stream;
   }
 
   function getVideoFrameBase64() {
@@ -210,7 +221,7 @@ export function startLiveSession(apiKey, opts = {}) {
     }
     videoEl = null;
     videoCanvas = null;
-    if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+    if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); setVideoStream(null); }
   }
 
   /** Send the same static image as a video frame at 1 FPS (camera-unavailable fallback). */

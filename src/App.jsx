@@ -27,7 +27,7 @@ import {
 
 const HERO_PREVIEW_STEP = {
   text: '왼쪽의 김밥 메뉴를 눌러주세요.',
-  box: { x: 7, y: 20, w: 40, h: 31 },
+  box: { x: 8, y: 27, w: 42, h: 30 },
   label: '여기를 눌러요',
 };
 
@@ -52,15 +52,29 @@ function DemoKiosk() {
   );
 }
 
-function VisualGuide({ imageUrl, step, videoStream }) {
+function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
   const frameRef = useRef(null);
   const imageRef = useRef(null);
   const videoRef = useRef(null);
   const [mediaBounds, setMediaBounds] = useState(null);
 
   useEffect(() => {
-    if (videoRef.current && videoStream) {
-      videoRef.current.srcObject = videoStream;
+    const video = videoRef.current;
+    if (!video || !videoStream) return;
+    // 같은 MediaStream이 liveVoice.js의 hidden videoEl에도 attach되어 있으면
+    // Chromium/Android에서 한쪽만 active 상태가 됨. 그래서 srcObject 변경 시
+    // 항상 명시적으로 load + play()를 다시 호출해서 우리 video element가
+    // 실제로 재생되도록 강제한다.
+    if (video.srcObject !== videoStream) {
+      video.srcObject = videoStream;
+    }
+    video.muted = true; // autoplay 정책 회피 (iOS Safari / 일부 Android WebView)
+    video.playsInline = true;
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch((err) => {
+        console.warn('[visual-guide] video.play() rejected:', err?.name, err?.message);
+      });
     }
   }, [videoStream]);
 
@@ -71,6 +85,8 @@ function VisualGuide({ imageUrl, step, videoStream }) {
     if (!frame) return;
 
     const frameRect = frame.getBoundingClientRect();
+    const containerWidth = frame.clientWidth || frameRect.width;
+    const containerHeight = frame.clientHeight || frameRect.height;
     let naturalWidth = 0;
     let naturalHeight = 0;
 
@@ -83,8 +99,8 @@ function VisualGuide({ imageUrl, step, videoStream }) {
     }
 
     const bounds = getContainedImageBounds({
-      containerWidth: frameRect.width,
-      containerHeight: frameRect.height,
+      containerWidth,
+      containerHeight,
       naturalWidth,
       naturalHeight,
     });
@@ -130,8 +146,18 @@ function VisualGuide({ imageUrl, step, videoStream }) {
           muted
           onLoadedMetadata={measureMedia}
           onPlay={measureMedia}
+          onResize={measureMedia}
           style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
         />
+      ) : isLiveMode ? (
+        // Live API mode: do NOT fall back to DemoKiosk (it would render a
+        // mock kiosk where the user expects to see their own camera feed).
+        // Show a dark placeholder with a status hint until the camera stream
+        // arrives.
+        <div className="live-camera-placeholder" role="status" aria-live="polite">
+          <span className="live-camera-spinner" aria-hidden="true" />
+          <span>카메라 연결 중…</span>
+        </div>
       ) : (
         <DemoKiosk />
       )}
@@ -212,6 +238,9 @@ export default function App() {
   const [matchedSkills, setMatchedSkills] = useState([]);
   const [liveSession, setLiveSession] = useState(null);
   const [liveState, setLiveState] = useState('idle');
+  // Mirror of liveSession.videoStream — the closure mutation alone is invisible
+  // to React, so we keep a parallel state that gets set via onVideoStreamChange.
+  const [liveVideoStream, setLiveVideoStream] = useState(null);
   const [imageBase64, setImageBase64] = useState(null);
   const [imageMimeType, setImageMimeType] = useState('image/jpeg');
   const [skillsData, setSkillsData] = useState([]);
@@ -243,6 +272,7 @@ export default function App() {
   // Cleanup live session on unmount
   useEffect(() => () => {
     if (liveSession) liveSession.stop();
+    setLiveVideoStream(null);
   }, [liveSession]);
 
   async function fetchGeminiApiKey() {
@@ -309,6 +339,7 @@ export default function App() {
         else if (newState === 'connecting') setLiveState('connecting');
       },
       onError: (err) => { console.warn('[live]', err.message); setLiveState('idle'); },
+      onVideoStreamChange: (stream) => { setLiveVideoStream(stream || null); },
     });
   }
 
@@ -375,6 +406,7 @@ export default function App() {
   function stopLiveVoice() {
     if (liveSession) { liveSession.stop(); setLiveSession(null); }
     setLiveState('idle');
+    setLiveVideoStream(null);
   }
 
   async function viewSkills() {
@@ -674,30 +706,13 @@ export default function App() {
         {stage === 'home' && (
           <section className="hero">
             <div className="hero-copy">
-              <span className="eyebrow"><Sparkles size={16} /> 1단계 · 먼저 할 일을 정해요</span>
-              <h1 aria-label="무엇을 하고 싶으세요?">무엇을 하고<br /><em>싶으세요?</em></h1>
-              <p>하고 싶은 일을 먼저 알려주세요. 그다음 필요한 화면을 찍을게요.</p>
-              <form className="intent-card" onSubmit={confirmRequestedGoal}>
+              <span className="eyebrow"><Sparkles size={16} /> 실시간 AI 도움</span>
+              <h1 aria-label="실시간 AI로 시작하기">실시간 AI로<br /><em>시작하기</em></h1>
+              <p>카메라나 사진을 통해 실시간으로 AI 도우미의 도움을 받을 수 있습니다.</p>
+              <form className="intent-card" onSubmit={(e) => e.preventDefault()}>
                 {!liveChoiceOpen ? (
                   <>
-                    <div className="intent-input-wrap">
-                      <label className="custom-input-label">
-                        <span>하고 싶은 일</span>
-                        <input ref={goalInputRef} value={customRequest} onChange={(event) => setCustomRequest(event.target.value)} placeholder="예: 빅맥 주문하기" />
-                      </label>
-                      <button
-                        className={`intent-mic-button ${voiceStatus === 'listening' ? 'is-listening' : ''}`}
-                        type="button"
-                        aria-label="말로 입력하기"
-                        title={voiceStatus === 'listening' ? '듣고 있어요' : '말로 입력하기'}
-                        onClick={startListening}
-                        disabled={voiceStatus === 'listening'}
-                      >
-                        <Mic size={22} aria-hidden="true" />
-                      </button>
-                    </div>
-                    {customError && <p className="voice-message is-error" role="alert">{customError}</p>}
-                    <div className="consent-checkbox-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 16, width: '100%', justifyContent: 'flex-start' }}>
+                    <div className="consent-checkbox-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 16, width: '100%', justifyContent: 'flex-start' }}>
                       <input
                         id="consent-checkbox"
                         type="checkbox"
@@ -709,10 +724,7 @@ export default function App() {
                         더 나은 안내를 위해 사진 제공에 동의합니다 (선택)
                       </label>
                     </div>
-                    <button type="submit" className="primary-button intent-next">
-                      다음 단계 <ChevronRight size={20} />
-                    </button>
-                    <button type="button" className="secondary-button intent-live" onClick={() => setLiveChoiceOpen(true)}>
+                    <button type="button" className="primary-button intent-live" onClick={() => setLiveChoiceOpen(true)} style={{ width: '100%' }}>
                       <Mic size={20} aria-hidden="true" />
                       실시간 AI로 시작
                     </button>
@@ -896,7 +908,7 @@ export default function App() {
               <button className="reset-button" type="button" onClick={reset}><RotateCcw size={18} /> 처음부터</button>
             </div>
             <div className="guide-layout">
-              <div className="image-card guide-image"><VisualGuide imageUrl={imageUrl} step={displayStep} videoStream={liveSession?.videoStream} /></div>
+              <div className="image-card guide-image"><VisualGuide imageUrl={imageUrl} step={displayStep} videoStream={liveVideoStream} isLiveMode={liveState !== 'idle'} /></div>
               <aside className="instruction-card">
                 <div className="progress-head"><span>{stepIndex + 1} / {totalSteps} 단계</span><small>천천히 하셔도 괜찮아요</small></div>
                 <div className="progress-track"><i style={{ width: `${progress}%` }} /></div>

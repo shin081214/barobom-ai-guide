@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.2.0",
   "scripts": {
-    "dev": "next dev -p 4173",
+    "dev": "next dev -H 0.0.0.0 -p 4173 --experimental-https --experimental-https-key certs/server.key --experimental-https-cert certs/server.cert",
+    "dev:http": "next dev -H 0.0.0.0 -p 4173",
+    "certs": "openssl req -x509 -newkey rsa:2048 -nodes -keyout certs/server.key -out certs/server.cert -days 365 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,DNS:*.local,IP:127.0.0.1,IP:0.0.0.0'",
     "build": "next build",
     "start": "next start -p 4173",
     "lint": "eslint .",

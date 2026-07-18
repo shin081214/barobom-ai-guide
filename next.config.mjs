@@ -6,7 +6,7 @@ const nextConfig = {
   // Next.js 16 blocks dev JS chunks from non-localhost origins unless the
   // hostname is explicitly allowed, leaving the page visible but unhydrated
   // (native file picker opens, but React onClick/onChange never runs).
-  allowedDevOrigins: ['192.168.219.100'],
+  allowedDevOrigins: ['192.168.219.100', '192.168.45.119'],
 };
 
 export default nextConfig;
