@@ -56,7 +56,7 @@ function VisualGuide({ imageUrl, step, videoStream }) {
   const frameRef = useRef(null);
   const imageRef = useRef(null);
   const videoRef = useRef(null);
-  const [imageBounds, setImageBounds] = useState(null);
+  const [mediaBounds, setMediaBounds] = useState(null);
 
   useEffect(() => {
     if (videoRef.current && videoStream) {
@@ -64,58 +64,73 @@ function VisualGuide({ imageUrl, step, videoStream }) {
     }
   }, [videoStream]);
 
-  const measureImage = useCallback(() => {
+  const measureMedia = useCallback(() => {
     const frame = frameRef.current;
     const image = imageRef.current;
-    if (!frame || !image) return;
+    const video = videoRef.current;
+    if (!frame) return;
 
     const frameRect = frame.getBoundingClientRect();
+    let naturalWidth = 0;
+    let naturalHeight = 0;
+
+    if (imageUrl && image) {
+      naturalWidth = image.naturalWidth;
+      naturalHeight = image.naturalHeight;
+    } else if (videoStream && video) {
+      naturalWidth = video.videoWidth;
+      naturalHeight = video.videoHeight;
+    }
+
     const bounds = getContainedImageBounds({
       containerWidth: frameRect.width,
       containerHeight: frameRect.height,
-      naturalWidth: image.naturalWidth,
-      naturalHeight: image.naturalHeight,
+      naturalWidth,
+      naturalHeight,
     });
-    setImageBounds(bounds ? { ...bounds, source: imageUrl } : null);
-  }, [imageUrl]);
+    setMediaBounds(bounds ? { ...bounds, source: imageUrl || 'video' } : null);
+  }, [imageUrl, videoStream]);
 
   useEffect(() => {
-    if (!imageUrl) return undefined;
-
     const frame = frameRef.current;
     const observer = typeof ResizeObserver === 'function' && frame
-      ? new ResizeObserver(measureImage)
+      ? new ResizeObserver(measureMedia)
       : null;
     observer?.observe(frame);
-    window.addEventListener('resize', measureImage);
-    if (imageRef.current?.complete) measureImage();
+    window.addEventListener('resize', measureMedia);
+
+    if (imageUrl && imageRef.current?.complete) {
+      measureMedia();
+    }
 
     return () => {
       observer?.disconnect();
-      window.removeEventListener('resize', measureImage);
+      window.removeEventListener('resize', measureMedia);
     };
-  }, [imageUrl, measureImage]);
+  }, [imageUrl, videoStream, measureMedia]);
 
-  const overlayStyle = (imageUrl && imageBounds)
+  const overlayStyle = (mediaBounds)
     ? {
-      left: `${imageBounds.left}px`,
-      top: `${imageBounds.top}px`,
-      width: `${imageBounds.width}px`,
-      height: `${imageBounds.height}px`,
+      left: `${mediaBounds.left}px`,
+      top: `${mediaBounds.top}px`,
+      width: `${mediaBounds.width}px`,
+      height: `${mediaBounds.height}px`,
     }
     : { inset: 0 };
 
   return (
     <div className="visual-frame" ref={frameRef}>
       {imageUrl ? (
-        <img ref={imageRef} src={imageUrl} alt="사용자가 올린 안내 대상 화면" onLoad={measureImage} />
+        <img ref={imageRef} src={imageUrl} alt="사용자가 올린 안내 대상 화면" onLoad={measureMedia} />
       ) : videoStream ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onLoadedMetadata={measureMedia}
+          onPlay={measureMedia}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
         />
       ) : (
         <DemoKiosk />
