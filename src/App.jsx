@@ -146,12 +146,14 @@ function fileToDataUrl(file) {
 
 function parseBoxFromText(text) {
   if (!text) return null;
-  const match = text.match(/\[box:\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\]/i);
-  if (match) {
-    const x = parseFloat(match[1]);
-    const y = parseFloat(match[2]);
-    const w = parseFloat(match[3]);
-    const h = parseFloat(match[4]);
+  const regex = /\[box:\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\]/gi;
+  const matches = [...text.matchAll(regex)];
+  if (matches.length > 0) {
+    const lastMatch = matches[matches.length - 1];
+    const x = parseFloat(lastMatch[1]);
+    const y = parseFloat(lastMatch[2]);
+    const w = parseFloat(lastMatch[3]);
+    const h = parseFloat(lastMatch[4]);
 
     if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) {
       return null;
@@ -268,8 +270,10 @@ export default function App() {
       onTranscription: ({speaker, text}) => {
         if (speaker === 'user') {
           console.log('[live] 🎤', text);
-          accumulatedText = '';
-          setLiveBox(null);
+          if (text && text.trim()) {
+            accumulatedText = '';
+            setLiveBox(null);
+          }
         } else {
           console.log('[live] 🤖', text);
         }

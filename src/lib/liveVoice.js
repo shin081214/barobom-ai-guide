@@ -373,7 +373,7 @@ export function startLiveSession(apiKey, opts = {}) {
             role: 'user',
             parts: [
               { inlineData: { data: imageBase64, mimeType: 'image/png' } },
-              { text: '이 화면을 보고 사용자를 도와주세요. 한국어로 짧고 친절하게 대답하세요.' },
+              { text: '이 화면을 분석하고 사용자가 디지털 기기를 사용할 수 있게 안내해주세요. 버튼이나 클릭해야 하는 특정 영역의 위치를 언급할 때는 반드시 대답 끝에 [box: x, y, w, h] 형태로 0~100 사이의 퍼센트 좌표를 기입하십시오.' },
             ],
           }],
           turnComplete: false,
