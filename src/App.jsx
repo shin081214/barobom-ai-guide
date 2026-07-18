@@ -431,6 +431,7 @@ export default function App() {
       const next = stepIndex + 1;
       setStepIndex(next);
       publishEvent('step_shown', { step: next + 1, totalSteps });
+      publishEvent('screen_changed', { step: next + 1, totalSteps });
     }
   }
 
@@ -662,6 +663,7 @@ export default function App() {
                   <h2>{step.text}</h2>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button className="listen-button" type="button" onClick={() => { speak(step.text); publishEvent('step_repeated', { step: stepIndex + 1 }); }}><Volume2 size={22} /> 다시 듣기</button>{' '}
+                  <button className="wrong-report-button" type="button" onClick={() => { publishEvent('user_reported_wrong', { step: stepIndex + 1 }); alert('피드백을 보내주셔서 감사합니다.'); }} style={{ background: 'transparent', color: '#dc3545', border: '1px solid #dc3545', borderRadius: 12, padding: '10px 18px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>잘못됐어요</button>{' '}
                   <button
                     className={`live-vision-button ${liveState !== 'idle' ? 'is-active' : ''}`}
                     type="button"
@@ -687,7 +689,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="guide-controls">
-                  <button className="previous-button" type="button" onClick={() => { setStepIndex((index) => Math.max(0, index - 1)); publishEvent('step_back', { step: stepIndex }); }} disabled={stepIndex === 0}><ChevronLeft /> 이전</button>
+                  <button className="previous-button" type="button" onClick={() => { setStepIndex((index) => Math.max(0, index - 1)); publishEvent('step_back', { step: stepIndex }); publishEvent('screen_changed', { step: stepIndex, totalSteps }); }} disabled={stepIndex === 0}><ChevronLeft /> 이전</button>
                   <button className="next-button" type="button" onClick={nextStep}>{isLastStep ? '다 했어요' : '다음 단계'} <ChevronRight /></button>
                 </div>
                 <p className="safety-note"><ShieldCheck size={18} /> 화면을 직접 눌러야 다음으로 넘어가요. AI가 대신 결제하지 않아요.</p>
