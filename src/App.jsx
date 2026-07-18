@@ -244,6 +244,44 @@ export default function App() {
     }
   }
 
+  async function startLiveFromHome() {
+    const apiKey = await fetchGeminiApiKey();
+    if (!apiKey) { alert('Gemini API 키가 설정되지 않았습니다.'); return; }
+
+    // Set a dummy goal so the guide UI can render the live controls.
+    const dummyGoal = {
+      id: 'goal-live', label: '실시간 AI 도움', hint: '음성으로 물어보세요', icon: '🤖',
+      steps: [{ text: '화면을 보여주며 음성으로 질문하세요.', label: '실시간', box: null }],
+    };
+    setSelectedGoal(dummyGoal);
+    setStepIndex(0);
+    setImageUrl('');
+    setImageBase64(null);
+    setDeviceInfo(null);
+    setMatchedSkills([]);
+
+    const prompt = '당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자가 카메라에 비춰주는 화면을 보고 친절하고 쉬운 한국어로 안내해주세요.';
+    const session = startLiveSession(apiKey, {
+      systemPrompt: prompt,
+      onResponse: () => {},
+      onTranscription: ({speaker, text}) => {
+        if (speaker === 'user') console.log('[live] 🎤', text);
+        else console.log('[live] 🤖', text);
+      },
+      onStateChange: (newState) => {
+        if (newState === 'ready' || newState === 'listening') setLiveState('listening');
+        else if (newState === 'muted') setLiveState('muted');
+        else if (newState === 'idle' || newState === 'error') setLiveState('idle');
+        else if (newState === 'connecting') setLiveState('connecting');
+      },
+      onError: (err) => { console.warn('[live]', err.message); setLiveState('idle'); },
+    });
+    setLiveSession(session);
+    setLiveState('connecting');
+    setStage('guide');
+    await session.speakWithVision(null, 'image/jpeg');
+  }
+
   function stopLiveVoice() {
     if (liveSession) { liveSession.stop(); setLiveSession(null); }
     setLiveState('idle');
@@ -519,7 +557,7 @@ export default function App() {
                 <button type="submit" className="primary-button intent-next">
                   다음 단계 <ChevronRight size={20} />
                 </button>
-                <button type="button" className="secondary-button intent-live">
+                <button type="button" className="secondary-button intent-live" onClick={startLiveFromHome}>
                   <Mic size={20} aria-hidden="true" />
                   실시간 AI로 시작
                 </button>
@@ -668,7 +706,7 @@ export default function App() {
         {stage === 'guide' && step && (
           <section className="workspace guide-workspace">
             <div className="guide-topbar">
-              <button className="back-button" type="button" onClick={() => setStage('photo')}><ArrowLeft size={20} /> 사진 다시 찍기</button>
+              <button className="back-button" type="button" onClick={() => setStage(selectedGoal?.id === 'goal-live' ? 'home' : 'photo')}><ArrowLeft size={20} /> {selectedGoal?.id === 'goal-live' ? '처음으로' : '사진 다시 찍기'}</button>
               <div className="guide-title"><span>{selectedGoal.icon}</span><div><small>지금 도와드리는 일</small><strong>{selectedGoal.label}</strong></div></div>
               <button className="reset-button" type="button" onClick={reset}><RotateCcw size={18} /> 처음부터</button>
             </div>
@@ -726,11 +764,18 @@ export default function App() {
                   }}>🧠 스킬 현황</button>
                   </div>
                 </div>
+                {selectedGoal?.id !== 'goal-live' && (
                 <div className="guide-controls">
                   <button className="previous-button" type="button" onClick={() => { setStepIndex((index) => Math.max(0, index - 1)); publishEvent('step_back', { step: stepIndex }); publishEvent('screen_changed', { step: stepIndex, totalSteps }); }} disabled={stepIndex === 0}><ChevronLeft /> 이전</button>
                   <button className="next-button" type="button" onClick={nextStep}>{isLastStep ? '다 했어요' : '다음 단계'} <ChevronRight /></button>
                 </div>
+                )}
+                {selectedGoal?.id !== 'goal-live' && (
                 <p className="safety-note"><ShieldCheck size={18} /> 화면을 직접 눌러야 다음으로 넘어가요. AI가 대신 결제하지 않아요.</p>
+                )}
+                {selectedGoal?.id === 'goal-live' && (
+                <button className="primary-button" type="button" onClick={reset} style={{ width: '100%', marginTop: 8 }}><RotateCcw size={18} /> 처음으로 돌아가기</button>
+                )}
               </aside>
             </div>
           </section>
