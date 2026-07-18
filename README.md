@@ -11,23 +11,33 @@ npm run dev
 
 브라우저에서 `http://localhost:4173`을 엽니다. 사진을 촬영하거나 올리면 Gemini가 실제 화면을 분석합니다.
 
-## 실제 사진 AI 분석 켜기
+## 환경변수 (`.env.local`)
 
 ```bash
 cp .env.example .env.local
 ```
 
-`.env.local`에 실제 Gemini 키를 입력합니다.
+`.env.local`에 실제 Gemini 키와 백엔드 주소를 입력합니다.
 
 ```env
-GEMINI_API_KEY=your_api_key_here
-# GEMINI_MODEL=gemini-3.5-flash
+GEMINI_API_KEY=your_api_key_here          # ✅ 필수 — Gemini Vision + Live API
+# GEMINI_MODEL=gemini-3.5-flash           # 선택 — Gemini 모델 선택
+# NEXT_PUBLIC_API_BASE_URL=...             # 선택 — 텔레메트리 + 기기 식별 백엔드
+# FASTAPI_URL=http://localhost:8000        # 선택 — M2+ AI 백엔드
 ```
 
-Next.js 개발 서버를 다시 시작하면 실제 사진 분석이 활성화됩니다. API 키는 `app/api/analyze/route.js`의 서버 Route Handler에서만 읽으며 브라우저 번들에 포함되지 않습니다. 업로드 이미지는 로컬 디스크에 저장하지 않습니다.
+| 변수 | 필수 | 용도 | 기본값 |
+|---|---|---|---|
+| `GEMINI_API_KEY` | ✅ | Gemini Vision 분석 + Live API 실시간 음성 | — |
+| `GEMINI_MODEL` | ❌ | Gemini 모델명 | `gemini-3.5-flash` |
+| `NEXT_PUBLIC_API_BASE_URL` | ❌ | 텔레메트리 백엔드 + 기기 식별 API | `https://dev.amanhasfallenintotheriver.space` |
+| `FASTAPI_URL` | ❌ | M2+ AI 백엔드 주소 | `http://localhost:8000` |
+
+Next.js 개발 서버를 다시 시작하면 실제 사진 분석이 활성화됩니다. API 키는 `app/api/analyze/route.js`와 `app/api/live-key/route.js`의 서버 Route Handler에서만 읽으며 브라우저 번들에 포함되지 않습니다. 업로드 이미지는 로컬 디스크에 저장하지 않습니다.
 
 ## 주요 기능
 
+### 📸 사진 분석 (Gemini Vision)
 - 사진 촬영·업로드와 미리보기
 - Gemini Vision 기반 목표 및 단계별 bbox JSON 생성
 - 목표 목록에 원하는 일이 없을 때 **한국어 음성인식 또는 직접 입력**
@@ -39,6 +49,20 @@ Next.js 개발 서버를 다시 시작하면 실제 사진 분석이 활성화�
 - Web Speech API 한국어 단계 음성 안내
 - 이전·다음·완료 단계 흐름
 - AI가 대신 결제하지 않는 human-in-the-loop 안전 안내
+
+### 🎤 실시간 음성 + 카메라 (Gemini Live API)
+- **"음성으로 물어보기"** 버튼 — 가이드 단계 중에 실시간 음성 대화 시작
+- Gemini Live API WebSocket으로 양방향 음성+영상 스트리밍
+- 후면 카메라로 화면을 보여주면서 자연어로 질문 가능
+- **카메라 fallback**: 카메라가 없으면 정적 이미지를 1 FPS video frame으로 전송
+- `speakWithVision()` 통합 모드 — 카메라 시도 후 실패 시 자동 fallback
+- 음소거/해제 토글 지원
+
+### 🧠 SKILL.md 기반 기기 안내 (백엔드 연동)
+- 사진 분석 시 FastAPI 백엔드 `POST /v1/identify` 호출로 기기 식별
+- `skills/` 디렉토리의 SKILL.md 파일에서 매칭된 기기 가이드 검색
+- 식별된 기기 정보(이름·브랜드·모델)를 화면에 배지로 표시
+- Live API 세션에 매칭된 Skill 내용을 시스템 프롬프트에 주입 → 더 정확한 안내
 
 ## 추천 사진 테스트
 
@@ -68,14 +92,30 @@ npm start        # 빌드 결과 실행, 포트 4173
 
 ## Next.js 구조
 
-- `app/layout.jsx` — 루트 레이아웃과 메타데이터
-- `app/page.jsx` — 홈 페이지 Server Component
-- `app/api/analyze/route.js` — Gemini 서버 Route Handler
-- `src/App.jsx` — 상호작용을 담당하는 Client Component
-- `src/styles.css` — 고령 친화 반응형 디자인
-- `server/analyzer.js` — AI 프롬프트와 JSON 좌표 검증
-- `src/App.test.jsx` — 사용자 흐름 테스트
-- `app/api/analyze/route.test.js` — Route Handler 테스트
+```
+barobom-ai-guide/
+├── app/
+│   ├── api/analyze/route.js      # Gemini Vision Route Handler (서버 전용)
+│   ├── api/live-key/route.js     # Live API 키 제공 Route Handler
+│   ├── layout.jsx                # 루트 레이아웃과 메타데이터
+│   └── page.jsx                  # 홈 페이지 Server Component
+├── server/
+│   └── analyzer.js               # AI 프롬프트와 JSON 좌표 검증
+├── src/
+│   ├── App.jsx                   # 메인 Client Component (전체 UI 상태)
+│   ├── styles.css                # 고령 친화 반응형 디자인
+│   └── lib/
+│       ├── liveVoice.js          # Gemini Live API WebSocket (실시간 음성+카메라)
+│       ├── feedback.js           # 텔레메트리 이벤트 + 기기 식별 (/v1/identify)
+│       ├── anonId.js             # 익명 사용자 ID (localStorage 기반)
+│       └── imageBounds.js        # 이미지 좌표 정규화 (object-fit: contain)
+├── skills/                       # SKILL.md 기기 가이드 (YAML frontmatter + 한국어 매뉴얼)
+│   ├── kiosk/                    #   키오스크
+│   ├── appliance/                #   가전
+│   └── boiler/                   #   보일러/온도조절기
+├── docs/api/analyze.md           # POST /api/analyze API 레퍼런스
+└── .env.example                  # 환경변수 템플릿
+```
 
 ## AI 응답 형식
 

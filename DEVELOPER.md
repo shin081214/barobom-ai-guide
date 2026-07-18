@@ -64,7 +64,7 @@ npm run dev
 
 ---
 
-## 프로젝트 구조 (2026-07-18 기준)
+## 프로젝트 구조 (2026-07-19 기준)
 
 ```
 barobom-ai-guide/
@@ -72,6 +72,8 @@ barobom-ai-guide/
 │   ├── api/analyze/
 │   │   ├── route.js          # Gemini Vision Route Handler (서버 전용)
 │   │   └── route.test.js     # 3 tests (MISSING_CONFIG, 빈 키, 정상흐름)
+│   ├── api/live-key/
+│   │   └── route.js          # Live API 키 제공 (GEMINI_API_KEY 안전 전달)
 │   ├── layout.jsx            # 루트 레이아웃
 │   ├── page.jsx              # 홈 페이지 (Server Component)
 │   └── page.test.jsx         # 1 test
@@ -79,21 +81,39 @@ barobom-ai-guide/
 │   ├── analyzer.js           # Gemini 프롬프트 빌더 + bbox 정규화
 │   └── analyzer.test.js      # 4 tests
 ├── src/
-│   ├── App.jsx               # 메인 Client Component (전체 UI 상태)
+│   ├── App.jsx               # 메인 Client Component (전체 UI 상태 + Live API 통합)
 │   ├── App.test.jsx          # 8 tests (사용자 흐름)
 │   ├── styles.css            # 고령층 친화 스타일
+│   ├── styles.test.js        # 1 test
 │   ├── testSetup.js          # Vitest + jsdom 셋업
 │   └── lib/
 │       ├── anonId.js         # 익명 사용자 ID (localStorage 기반)
 │       ├── anonId.test.js    # 6 tests
-│       ├── feedback.js       # 텔레메트리 이벤트 발행 (fire-and-forget)
-│       └── feedback.test.js  # 5 tests
+│       ├── feedback.js       # 텔레메트리 이벤트 발행 + 기기 식별 (/v1/identify)
+│       ├── feedback.test.js  # 5 tests
+│       ├── liveVoice.js      # Gemini Live API WebSocket (실시간 음성+카메라)
+│       ├── liveVoice.test.js # tests
+│       ├── imageBounds.js    # 이미지 좌표 정규화 (object-fit: contain)
+│       └── imageBounds.test.js # tests
+├── skills/
+│   ├── README.md             # SKILL.md 작성 가이드 (YAML frontmatter 규격)
+│   ├── kiosk/
+│   │   └── easy-kiosk-ek-192.md
+│   ├── appliance/
+│   │   ├── lg-tromm.md
+│   │   └── samsung-ac-remote.md
+│   └── boiler/
+│       └── kd-navian-ctr5500.md
 ├── docs/
 │   └── api/analyze.md        # POST /api/analyze API 레퍼런스
+├── scripts/
+│   └── test-image.js         # 테스트용 이미지 생성
 ├── .env.example              # 환경변수 템플릿
 ├── .env.local                # 로컬 환경변수 (gitignore)
 ├── .hermes/plans/            # SKILL.md 자기 발전 시스템 계획서
 ├── package.json
+├── eslint.config.mjs
+├── next.config.mjs
 └── vitest.config.js
 ```
 
@@ -151,6 +171,38 @@ Gemini Vision으로 이미지 분석 → 목표 + 단계 + bbox 반환.
 }
 ```
 
+#### `POST /v1/identify` — 기기 식별 + SKILL.md 매칭
+
+```json
+// Request
+{
+  "image": "<base64-encoded-image>",
+  "mime_type": "image/jpeg"
+}
+
+// Response (200)
+{
+  "device": {
+    "name": "Easy Kiosk EK-192",
+    "brand": "이지포스/KICC",
+    "model": "EK-192",
+    "category": "kiosk"
+  },
+  "skills": [
+    {
+      "title": "Easy Kiosk EK-192",
+      "content": "## ⚠️ 먼저 확인하세요\n\n...",
+      "brand": "이지포스/KICC",
+      "model": "EK-192",
+      "category": "kiosk"
+    }
+  ],
+  "raw_analysis": "Gemini Vision analysis result..."
+}
+```
+
+**파이프라인**: Gemini Vision으로 기기 식별 → `skills/{category}/*.md` 검색 → YAML frontmatter 매칭 → Skill 내용 반환
+
 **유효한 `event_type`** (9개):
 
 | 이벤트 | 트리거 | App.jsx 위치 |
@@ -200,7 +252,127 @@ nohup python -m uvicorn api.app.main:app --host 0.0.0.0 --port 8000 > /tmp/uvico
 
 ---
 
-## 테스트
+## Gemini Live API (실시간 음성 + 카메라)
+
+### 아키텍처 개요
+
+```
+┌─────────────────────────┐       ┌──────────────────────────────┐
+│  Next.js 프론트엔드        │       │  Google Gemini Live API        │
+│  src/lib/liveVoice.js    │       │  (WebSocket)                   │
+│                          │       │                                │
+│  AudioWorklet (16kHz) ───▶─────▶│  models/gemini-3.1-flash-      │
+│  AudioWorklet (24kHz) ◀──◀─────│  live-preview                   │
+│  Video frames (1 FPS)  ───▶────▶│                                │
+└──────────┬──────────────┘       └────────────────────────────────┘
+           │
+           │ GET /api/live-key
+           ▼
+┌──────────────────────────┐
+│  Route Handler            │
+│  (GEMINI_API_KEY 노출 X)  │
+└──────────────────────────┘
+```
+
+**핵심**: Gemini Live API WebSocket을 통해 오디오는 16kHz PCM → 24kHz PCM으로 실시간 스트리밍됩니다. 영상은 1 FPS JPEG 프레임으로 전송됩니다.
+
+### `GET /api/live-key`
+
+브라우저에 `GEMINI_API_KEY`를 안전하게 전달하는 Route Handler입니다.
+
+```
+GET /api/live-key → { "key": "AIza..." }  또는  { "key": "" }
+```
+
+| 상태 | 의미 |
+|---|---|
+| `200` | 키 반환 (빈 문자열이면 키 미설정) |
+
+> API 키는 서버 측 `.env.local`에서만 읽으므로 브라우저 번들에 노출되지 않습니다.
+
+### `src/lib/liveVoice.js` 아키텍처
+
+```
+startLiveSession(apiKey, opts) → { speak, speakWithVision, mute, unmute, stop, sendText, state }
+```
+
+| 기능 | 구현 상세 |
+|---|---|
+| **마이크 입력** | AudioWorklet (16kHz PCM), `getUserMedia({ audio })` |
+| **오디오 출력** | AudioWorklet (24kHz PCM), Int16 → Float32 변환 후 재생 |
+| **영상 입력** | `getUserMedia({ video, facingMode: 'environment' })` → Canvas → JPEG (1 FPS) |
+| **정적 이미지 fallback** | `startStaticFrameLoop(imageBase64)` — 카메라 없을 때 업로드 이미지를 1 FPS로 전송 |
+| **음소거** | `isMuted` 플래그로 AudioWorklet 출력 차단 |
+| **VAD** | Gemini Live API `automaticActivityDetection` (2초 무음 감지) |
+| **한국어 음성** | `speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName: 'Kore'` |
+| **모델** | `models/gemini-3.1-flash-live-preview` |
+
+### `speak()` vs `speakWithVision()` 통합 모드
+
+#### `speak(imageBase64)` — 정적 이미지 모드
+1. WebSocket 연결 및 AudioWorklet 초기화
+2. `setupComplete` 대기
+3. `clientContent.turns[]`로 이미지 전송 (`turnComplete: false`)
+4. 마이크 스트림 연결 → VAD가 사용자 음성을 감지하면 응답 시작
+
+#### `speakWithVision(imageBase64, imageMimeType)` — 통합 모드
+1. 마이크 + 카메라 권한 동시 요청
+2. 카메라 성공 → `initVideoFrames()`로 1 FPS 실시간 영상 전송
+3. 카메라 실패 → `startStaticFrameLoop()`로 정적 이미지 fallback
+4. 마이크 스트림 연결 → 자연어 대화 시작
+
+### App.jsx 통합 흐름 (`toggleLiveVision()`)
+
+```
+1. /api/live-key로 API 키 가져오기
+2. identifyDevice()로 백엔드 /v1/identify 호출 → SKILL.md 매칭
+3. createLiveSession(apiKey, skills) 호출
+   - 시스템 프롬프트에 현재 단계 + 매칭된 Skill 내용 주입
+4. session.speakWithVision(imageBase64, imageMimeType) 호출
+5. 상태: idle → connecting → listening ↔ muted
+```
+
+### 백엔드 `/v1/identify` → SKILL.md 검색 파이프라인
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant BE as FastAPI Backend
+    participant GV as Gemini Vision
+    participant FS as Skills/ (파일시스템)
+
+    FE->>BE: POST /v1/identify { image, mime_type }
+    BE->>GV: Gemini Vision으로 기기 식별
+    GV-->>BE: { brand:"삼성", model:"AR07T...", category:"appliance" }
+    BE->>FS: skills/{category}/ 검색
+    FS-->>BE: 매칭된 SKILL.md (YAML frontmatter + 본문)
+    BE-->>FE: { device: {name, brand, model, category}, skills: [{title, content, ...}] }
+    FE->>FE: deviceInfo 배지 표시 + Live API 시스템 프롬프트에 Skill 주입
+```
+
+**`identifyDevice(imageBase64, mimeType)`** (`src/lib/feedback.js`):
+- `NEXT_PUBLIC_API_BASE_URL/v1/identify`로 POST 요청
+- fire-and-forget (실패해도 UX 차단 안 함)
+- 응답: `{ device: {name, brand, model, category}, skills: [{title, content, ...}], raw_analysis: "..." }`
+
+**SKILL.md 형식** (`skills/README.md` 참조):
+```yaml
+---
+device:
+  name: "Easy Kiosk EK-192"
+  category: "kiosk"
+  brand: "이지포스/KICC"
+  model: "EK-192"
+  visual_clues:
+    - "화면 상단 로고"
+    - "하단 모델명 표기"
+  usage_context: "무인 주문 키오스크"
+version: "1.0.0"
+status: "published"
+created: "2026-07-18"
+---
+```
+
 
 ### 프론트엔드
 
@@ -266,11 +438,23 @@ main
 | Cloudflare Tunnel | — | `dev.amanhasfallenintotheriver.space` |
 | Langfuse 트레이싱 | — | (no-op until credentials) |
 
-### ⏳ M2 — 제품 식별 + Skill 검색 (예정)
+### ⏳ M2 — 제품 식별 + Skill 검색 (진행 중)
+
+| Task | 커밋 | 파일 |
+|---|---|---|
+| Gemini Live API WebSocket 클라이언트 | — | `src/lib/liveVoice.js` |
+| `/api/live-key` Route Handler | — | `app/api/live-key/route.js` |
+| `speakWithVision()` 통합 모드 | — | `src/lib/liveVoice.js` |
+| SKILL.md 템플릿 + 가이드 | — | `skills/README.md` |
+| 기기 Skill 작성 (Kiosk/Appliance/Boiler) | — | `skills/**/*.md` |
+| `POST /v1/identify` — 기기 식별 | — | `src/lib/feedback.js` (`identifyDevice`) |
+| Skill → Live API 시스템 프롬프트 주입 | — | `src/App.jsx` (`createLiveSession`) |
+
+### ⏳ M3 — PostgreSQL/pgvector + Gemini Vision 연동 (예정)
 
 - PostgreSQL/pgvector → 기기 지식 베이스
-- `/v1/analyze` → Gemini Vision 연동
-- 디바이스 식별 + Skill 매칭
+- `/v1/analyze` → Gemini Vision 전용 분석
+- 디바이스 식별 정확도 개선
 
 ---
 
