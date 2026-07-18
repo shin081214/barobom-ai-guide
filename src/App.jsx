@@ -611,6 +611,17 @@ export default function App() {
     if (inputRef.current) inputRef.current.value = '';
   }
 
+  const displayStep = useMemo(() => {
+    if (selectedGoal?.id === 'goal-live' && liveBox) {
+      return {
+        ...step,
+        box: liveBox,
+        label: '여기예요',
+      };
+    }
+    return step;
+  }, [selectedGoal, step, liveBox]);
+
   return (
     <div className={`app text-${['normal', 'large', 'xlarge'][textScale]}`}>
       <header className="site-header">
@@ -854,7 +865,7 @@ export default function App() {
               <button className="reset-button" type="button" onClick={reset}><RotateCcw size={18} /> 처음부터</button>
             </div>
             <div className="guide-layout">
-              <div className="image-card guide-image"><VisualGuide imageUrl={imageUrl} step={step} /></div>
+              <div className="image-card guide-image"><VisualGuide imageUrl={imageUrl} step={displayStep} /></div>
               <aside className="instruction-card">
                 <div className="progress-head"><span>{stepIndex + 1} / {totalSteps} 단계</span><small>천천히 하셔도 괜찮아요</small></div>
                 <div className="progress-track"><i style={{ width: `${progress}%` }} /></div>
