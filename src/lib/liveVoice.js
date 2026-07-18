@@ -403,7 +403,7 @@ export function startLiveSession(apiKey, opts = {}) {
             role: 'user',
             parts: [
               { inlineData: { data: imageBase64, mimeType: 'image/png' } },
-              { text: '이 화면을 분석하고 사용자가 디지털 기기를 사용할 수 있게 안내해주세요. 버튼이나 클릭해야 하는 특정 영역의 위치를 언급할 때는 반드시 대답 끝에 [box: x, y, w, h] 형태로 0~100 사이의 퍼센트 좌표를 기입하십시오.' },
+              { text: '이 화면을 분석하고 사용자가 디지털 기기를 사용할 수 있게 안내해주세요. 버튼이나 클릭해야 하는 특정 영역의 위치를 언급할 때는 대답의 어딘가에 [box: x, y, w, h] 형식(0 이상 100 이하의 퍼센트 좌표, 대괄호 필수)을 정확히 한 번 기입하십시오. 위치를 추정할 수 없으면 [box: 0, 0, 0, 0]으로 표시하십시오. 그 외 일반 응답에는 절대 포함하지 마십시오.' },
             ],
           }],
           turnComplete: false,

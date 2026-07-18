@@ -2,7 +2,8 @@ import { expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
-import App from './App.jsx';
+import App, { __testing__ } from './App.jsx';
+const { parseBoxFromText } = __testing__;
 
 vi.mock('./lib/feedback.js', () => ({
   publishEvent: vi.fn().mockResolvedValue('mock-session-id'),
@@ -119,4 +120,46 @@ test('localStorage에 이미 true로 저장된 상태에서 렌더링 시 동의
   const checkbox = screen.getByRole('checkbox', { name: '더 나은 안내를 위해 사진 제공에 동의합니다 (선택)' });
   expect(checkbox).toBeChecked();
   expect(screen.getByText('사진은 마스킹 후 개선에 쓰여요')).toBeInTheDocument();
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// parseBoxFromText — Live API 응답에서 박스 토큰만 안전하게 추출한다.
+// robotics-spatial-understanding의 extractJsonArray / clip01k 패턴을 차용해
+// 0~100 강제 클립, NaN→null, not-found([0,0,0,0])→null, 공백·대소문자 변형
+// 까지 단위 검증한다.
+// ────────────────────────────────────────────────────────────────────────
+
+test('parseBoxFromText: 표준 [box: x, y, w, h] 형식을 그대로 파싱한다', () => {
+  expect(parseBoxFromText('여기를 눌러보세요. [box: 7, 20, 40, 31]'))
+    .toEqual({ x: 7, y: 20, w: 40, h: 31 });
+});
+
+test('parseBoxFromText: 0~100 범위 밖 값은 강제로 클립한다', () => {
+  expect(parseBoxFromText('[box: 105, -3, 200, 50]'))
+    .toEqual({ x: 100, y: 0, w: 100, h: 50 });
+});
+
+test('parseBoxFromText: 모든 좌표가 0인 박스는 not-found로 보고 null을 반환한다', () => {
+  expect(parseBoxFromText('[box: 0, 0, 0, 0]')).toBeNull();
+});
+
+test('parseBoxFromText: 공백·대소문자·소수점 변형에 모두 견딘다', () => {
+  expect(parseBoxFromText('[ Box : 1.5 , 2.5 , 3.5 , 4.5 ]'))
+    .toEqual({ x: 1.5, y: 2.5, w: 3.5, h: 4.5 });
+});
+
+test('parseBoxFromText: 펜스([])가 없는 일반 문장 안의 box:는 무시한다 (false-positive 방지)', () => {
+  expect(parseBoxFromText('box: 7, 20, 40, 31 is just text')).toBeNull();
+});
+
+test('parseBoxFromText: onlyFirst 옵션이 켜져 있으면 첫 번째 박스를 채택한다', () => {
+  const text = 'first [box: 1, 2, 3, 4] then [box: 5, 6, 7, 8]';
+  expect(parseBoxFromText(text, { onlyFirst: true }))
+    .toEqual({ x: 1, y: 2, w: 3, h: 4 });
+});
+
+test('parseBoxFromText: 기본 동작에서는 마지막 박스를 채택한다', () => {
+  const text = 'first [box: 1, 2, 3, 4] then [box: 5, 6, 7, 8]';
+  expect(parseBoxFromText(text))
+    .toEqual({ x: 5, y: 6, w: 7, h: 8 });
 });

@@ -355,29 +355,32 @@ function fileToDataUrl(file) {
   });
 }
 
-function parseBoxFromText(text) {
+function parseBoxFromText(text, { onlyFirst = false } = {}) {
   if (!text) return null;
-  const regex = /[\[\(]?box:\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*[\]\)]?/gi;
+  // 다양한 변형에 견디는 regex: "[box: 7, 20, 40, 31]", "[ box : 7,20,40,31 ]",
+  // 대문자 "Box:", 음수/소수 모두 허용. 펜스([])는 필수 — 없는 텍스트 안에
+  // 우연히 "box:"가 등장하는 일반 응답에서 false positive를 막기 위함.
+  const regex = /\[\s*box\s*:\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\]/gi;
   const matches = [...text.matchAll(regex)];
-  if (matches.length > 0) {
-    const lastMatch = matches[matches.length - 1];
-    const x = parseFloat(lastMatch[1]);
-    const y = parseFloat(lastMatch[2]);
-    const w = parseFloat(lastMatch[3]);
-    const h = parseFloat(lastMatch[4]);
-
-    if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) {
-      return null;
-    }
-    return {
-      x: Math.max(0, Math.min(100, x)),
-      y: Math.max(0, Math.min(100, y)),
-      w: Math.max(0, Math.min(100, w)),
-      h: Math.max(0, Math.min(100, h)),
-    };
-  }
-  return null;
+  if (matches.length === 0) return null;
+  // onlyFirst: 첫 번째 박스만 사용 (초기 안내 후보). 기본은 마지막 박스 사용.
+  const m = onlyFirst ? matches[0] : matches[matches.length - 1];
+  const [x, y, w, h] = [m[1], m[2], m[3], m[4]].map(Number);
+  if ([x, y, w, h].some((v) => !Number.isFinite(v))) return null;
+  // 0~100 범위로 강제 클립 (모델이 범위 밖을 보내도 frame을 벗어나지 않게).
+  const cx = Math.max(0, Math.min(100, x));
+  const cy = Math.max(0, Math.min(100, y));
+  const cw = Math.max(0, Math.min(100, w));
+  const ch = Math.max(0, Math.min(100, h));
+  // not-found 단일 신호: 모든 좌표가 0인 박스는 의도적으로 "지금은 가리킬
+  // 게 없다"는 신호로 해석해서 box를 그리지 않는다.
+  if (cx === 0 && cy === 0 && cw === 0 && ch === 0) return null;
+  return { x: cx, y: cy, w: cw, h: ch };
 }
+
+// 테스트용 named export. 기본 default export (App 컴포넌트)와 별개로 단위
+// 검증할 수 있도록 노출한다. 번들에 영향 없음 (tree-shaken).
+export const __testing__ = { parseBoxFromText };
 
 function speak(text) {
   if (!('speechSynthesis' in window)) return;
@@ -464,42 +467,71 @@ export default function App() {
     }
 
     prompt += `\n\n[안내 상자 표시 기능]
-사용자가 화면의 특정 버튼, 메뉴, 혹은 입력창의 위치를 물어보거나, 당신이 특정 위치를 가리키며 안내할 때는 반드시 해당 영역의 대략적인 퍼센트 좌표를 계산하여 대답(text)의 끝에 \`[box: x, y, w, h]\` 형태로 0~100 사이의 숫자로 기입해 주십시오. (예: "여기 왼쪽 위의 김밥 메뉴를 눌러보세요. [box: 7, 20, 40, 31]")
-- x: 상자의 좌측 상단 가로 시작점 (%)
-- y: 상자의 좌측 상단 세로 시작점 (%)
-- w: 상자의 가로 너비 (%)
-- h: 상자의 세로 높이 (%)
-반드시 사용자가 볼 수 있는 기기 화면 내부의 해당 컴포넌트 위치에 맞추어 정확하게 좌표를 추정해 제공하십시오. 일반적인 인사나 일상 대화, 기기 위치를 가리키지 않는 응답에서는 절대로 이 태그를 포함하지 마십시오.`;
+사용자가 화면의 특정 버튼, 메뉴, 혹은 입력창의 위치를 물어보거나, 당신이 특정 위치를 가리키며 안내할 때는 반드시 해당 영역의 대략적인 퍼센트 좌표를 계산하여 대답(text)의 끝에 [box: x, y, w, h] 형식으로 기입해 주십시오.
 
+형식:
+- 대괄호 []는 필수이며, 박스 토큰은 응답 본문 안 어딘가(보통 끝)에 한 번 들어갑니다.
+- 좌표는 모두 0 이상 100 이하 (퍼센트, 0..100) — 절대 음수나 100 초과는 허용되지 않습니다.
+- x, y는 상자의 좌측 상단 시작점 (%), w, h는 상자의 가로/세로 크기 (%)입니다.
+- 좌표를 추정할 수 없을 때는 [box: 0, 0, 0, 0]을 답에 포함해 의도를 명시하십시오 (그러면 안내 상자가 자동으로 사라집니다).
+- 일반적인 인사, 일상 대화, 위치 안내가 필요 없는 응답에서는 이 태그를 절대 포함하지 마십시오.
+
+예시:
+- "왼쪽의 김밥 메뉴를 눌러보세요. [box: 7, 20, 40, 31]"
+- "지금 화면에서는 위치를 가리킬 수 없네요. [box: 0, 0, 0, 0]"
+
+반드시 사용자가 볼 수 있는 기기 화면 내부의 컴포넌트 위치에 맞추어 정확하게 좌표를 추정해 제공하십시오.`;
+
+    // 단일 누적 버퍼: 모델 응답 chunk는 onResponse 또는 onTranscription 한
+    // 쪽으로만 오지만 둘 다 같은 텍스트를 누적하면 같은 [box:]가 두 번 파싱
+    // 되어 last-box만 쓰는 의미가 흐려진다. 한 쪽 채널에 정규화해서 한 번만
+    // 파싱하도록 한다. 단순히 "둘 중 마지막 도착한 쪽"에 텍스트를 붙여 파싱.
     let accumulatedText = '';
-    let accumulatedModelText = '';
+    let lastBoxRef = null; // 직전에 set한 박스 (불필요한 리렌더 방지)
+    let lastUserTurnText = ''; // 직전 사용자 발화 누적. 새 사용자 발화 감지.
+
+    const tryUpdateBox = (next) => {
+      if (!next) return;
+      // 같은 박스면 setState skip → React 리렌더 폭주 방지.
+      if (
+        lastBoxRef &&
+        lastBoxRef.x === next.x && lastBoxRef.y === next.y &&
+        lastBoxRef.w === next.w && lastBoxRef.h === next.h
+      ) {
+        return;
+      }
+      lastBoxRef = next;
+      setLiveBox(next);
+    };
 
     return startLiveSession(apiKey, {
       systemPrompt: prompt,
       onResponse: (text) => {
+        if (!text) return;
         accumulatedText += text;
         const box = parseBoxFromText(accumulatedText);
-        if (box) {
-          setLiveBox(box);
-        }
+        tryUpdateBox(box);
       },
       onTranscription: ({speaker, text}) => {
         if (speaker === 'user') {
           console.log('[live] 🎤', text);
-          if (text && text.trim()) {
+          if (text && text.trim() && text !== lastUserTurnText) {
+            lastUserTurnText = text;
+            // 사용자 새 발화 → 모델 누적 텍스트는 리셋. 단 이전 모델 박스는
+            // UX 자연스러움을 위해 새 박스가 도착할 때까지 유지 (즉시 null로
+            // 지우지 않는다). 모델이 [box:] 새로 보내면 tryUpdateBox로 갱신.
+            // 새 박스가 절대 안 오면 reset()/세션 종료 타이밍에 사라진다.
             accumulatedText = '';
-            accumulatedModelText = '';
-            setLiveBox(null);
           }
         } else {
           console.log('[live] 🤖', text);
-          if (text) {
-            accumulatedModelText += text;
-            const box = parseBoxFromText(accumulatedModelText);
-            if (box) {
-              setLiveBox(box);
-            }
-          }
+          if (!text) return;
+          // 모델 응답 텍스트는 onResponse와 중복되지 않는 한 accumulation에
+          // 합치지 않는다. onResponse가 server.content의 text chunk를 받고,
+          // onTranscription은 그 응답의 TTS 전사(transcription)를 받는다.
+          // 두 경로로 동일 [box:]가 두 번 잡혀도 lastBoxRef 비교로 무시된다.
+          const box = parseBoxFromText(accumulatedText + text);
+          tryUpdateBox(box);
         }
       },
       onStateChange: (newState) => {
