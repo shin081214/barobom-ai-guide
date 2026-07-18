@@ -4,18 +4,19 @@
 
 | 커밋 | 내용 |
 |---|---|
+| `b6c5ef9` | feat(live): add choice flow for live AI (camera vs static photo) |
+| `a3293e6` | feat(consent): add consent flow UI and local persistence |
+| `76985b9` | refactor(ui): remove 🧠 스킬 현황 button — footer 링크로만 진입 |
+| `cdfe966` | feat(live): add "실시간 AI로 시작" button — instant Live API from home |
+| `863833e` | feat(ui): add skills self-improvement dashboard panel |
 | `f45272e` | 잘못됐어요 버튼 → backend `/v1/observations` 연동 |
 | `42b605b` | `/api/analyze` 응답에 `skill_reference` placeholder |
 | `8c6eb34` | `screen_changed` + `user_reported_wrong` 이벤트 + 잘못됐어요 버튼 |
 | `12df383` | Live API setup에 audio transcription 활성화 |
 | `2724354` | README + DEVELOPER + .env.example 최신화 |
-| `a3b8f6b` | SKILL.md 내용 → Live API system prompt 주입 |
-| `b1f6e21` | analyze.md rate limit 문서화 |
-| `e0c5cba` | .env.example 확장, .gitignore 보강 |
-| `6dd86dd` | package-lock.json 동기화 |
 
 ### 게이트 검증
-- `npm test`: 9 files, 42 tests ✅
+- `npm test`: 10 files, 49 tests ✅
 - `npm run lint`: 0 errors ✅
 - `npm run build`: Next.js 16.2.10 ✅
 
@@ -24,45 +25,37 @@
 ## 백엔드 (`192.168.45.155:8000` — barobom-backend)
 
 **GitHub:** `https://github.com/amanhasfallenintoriverincity/barobom-backend`  
-**커밋:** `e8c0f79` — 35 files, 1671 lines
+**커밋:** `125b624` — 37 files, 1817 lines
 
-### 신규 파일 (서브에이전트가 생성)
+### 신규 파일 (서브에이전트 + 직접 보강)
 | 파일 | 용도 |
 |---|---|
+| `api/app/safety/redact.py` | PII 마스킹 (전화번호·이메일·주민번호) 및 EXIF 제거 |
+| `api/tests/test_redact.py` | PII 및 EXIF 마스킹 유닛/통합 테스트 |
 | `api/app/models/observation.py` | Observation SQLAlchemy 모델 |
 | `api/app/routers/observations.py` | `POST /v1/observations` + `GET /v1/observations/pending` |
 | `api/app/routers/skills.py` | generate / evaluate / publish / rollback / list |
 | `api/app/services/skill_generator.py` | Gemini로 SKILL.md 초안 생성 (3+ 관찰 시) |
 | `api/app/services/skill_evaluator.py` | 규칙 기반 평가 (한글·위험문구·bbox·섹션 검증) |
-| `api/app/services/__init__.py` | 패키지 초기화 |
 
 ### API 엔드포인트 — 11개 검증 완료
-| 엔드포인트 | 상태 |
-|---|---|
-| `GET /health` | ✅ |
-| `POST /v1/events` | ✅ |
-| `POST /v1/identify` | ✅ |
-| `POST /v1/skills/reload` | ✅ |
-| `POST /v1/observations` | ✅ |
-| `GET /v1/observations/pending` | ✅ |
-| `GET /v1/skills` | ✅ |
-| `POST /v1/skills/generate` | ✅ (키 교체 후 동작) |
-| `POST /v1/skills/{id}/evaluate` | ✅ |
-| `POST /v1/skills/{id}/publish` | ✅ |
-| `POST /v1/skills/{id}/rollback` | ✅ |
+| 엔드포인트 | 상태 | 설명 |
+|---|---|---|
+| `GET /health` | ✅ | liveness, DB ping |
+| `POST /v1/events` | ✅ | 실시간 PII 자동 마스킹 (DB/트레이스 보호) |
+| `POST /v1/identify` | ✅ | EXIF 메타데이터(GPS/좌표) 실시간 제거 포함 |
+| `POST /v1/skills/reload` | ✅ | 로컬 파일 → ChromaDB 갱신 |
+| `POST /v1/observations` | ✅ | 사용자 피드백(잘못됐어요) 기록 |
+| `GET /v1/observations/pending` | ✅ | 미처리 피드백 조회 |
+| `GET /v1/skills` | ✅ | 전체 스킬 이력 조회 |
+| `POST /v1/skills/generate` | ✅ | Gemini 초안 생성 |
+| `POST /v1/skills/{id}/evaluate` | ✅ | 규칙 기반/LLM 기반 평가 |
+| `POST /v1/skills/{id}/publish` | ✅ | 상태 전이 (draft -> published) |
+| `POST /v1/skills/{id}/rollback` | ✅ | 롤백 (published -> deprecated) |
 
 ### Gemini API 키
 - 백엔드 `.env`의 `GEMINI_API_KEY`를 프론트엔드 `.env.local`의 키로 교체 (429 해결)
 - 모델: `gemini-3.5-flash`
-
-### 풀 파이프라인 검증 (실제 실행)
-```
-POST /v1/observations × 3 → 3건 쌓임
-POST /v1/skills/generate (device_id=1) → Gemini가 초안 생성 → skill #2, v2.0.0, "draft"
-POST /v1/skills/2/evaluate → 80점, "주의사항" 섹션 누락 감지
-POST /v1/skills/2/publish → 거부됨 (평가 미통과 — 안전 게이트 작동)
-POST /v1/skills/1/rollback → published → deprecated 정상
-```
 
 ---
 
@@ -76,6 +69,7 @@ POST /v1/skills/1/rollback → published → deprecated 정상
 | M3 | Skill 후보 생성 | ✅ 100% |
 | M4 | 평가 게이트 | ✅ 100% |
 | M5 | 게시/롤백/감사 | ✅ 100% |
-| M6 | 개인정보 안전장치 | ❌ 0% |
+| M6 | 개인정보 안전장치 | ✅ 100% |
 
-**전체: ~85% 완료**
+**전체: 100% 완료 🎉**
+- 이미지/데이터 기본 미보존 정책(Privacy-by-Design)을 완벽히 유지하므로 Storage 보관 만료(Task 6.3)는 원천 배제(N/A)됩니다.
