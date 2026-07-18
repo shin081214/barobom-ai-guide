@@ -221,6 +221,14 @@ export default function App() {
       prompt += `\n\n[아래는 이 기기에 대해 알고 있는 사용 가이드입니다. 이 정보를 참고해서 더 정확하게 안내해주세요.]\n\n${skillBlock}`;
     }
 
+    prompt += `\n\n[안내 상자 표시 기능]
+사용자가 화면의 특정 버튼, 메뉴, 혹은 입력창의 위치를 물어보거나, 당신이 특정 위치를 가리키며 안내할 때는 반드시 해당 영역의 대략적인 퍼센트 좌표를 계산하여 대답(text)의 끝에 \`[box: x, y, w, h]\` 형태로 0~100 사이의 숫자로 기입해 주십시오. (예: "여기 왼쪽 위의 김밥 메뉴를 눌러보세요. [box: 7, 20, 40, 31]")
+- x: 상자의 좌측 상단 가로 시작점 (%)
+- y: 상자의 좌측 상단 세로 시작점 (%)
+- w: 상자의 가로 너비 (%)
+- h: 상자의 세로 높이 (%)
+반드시 사용자가 볼 수 있는 기기 화면 내부의 해당 컴포넌트 위치에 맞추어 정확하게 좌표를 추정해 제공하십시오. 일반적인 인사나 일상 대화, 기기 위치를 가리키지 않는 응답에서는 절대로 이 태그를 포함하지 마십시오.`;
+
     let accumulatedText = '';
 
     return startLiveSession(apiKey, {
@@ -298,22 +306,7 @@ export default function App() {
     setDeviceInfo(null);
     setMatchedSkills([]);
 
-    const prompt = '당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자가 카메라에 비춰주는 화면을 보고 친절하고 쉬운 한국어로 안내해주세요.';
-    const session = startLiveSession(apiKey, {
-      systemPrompt: prompt,
-      onResponse: () => {},
-      onTranscription: ({speaker, text}) => {
-        if (speaker === 'user') console.log('[live] 🎤', text);
-        else console.log('[live] 🤖', text);
-      },
-      onStateChange: (newState) => {
-        if (newState === 'ready' || newState === 'listening') setLiveState('listening');
-        else if (newState === 'muted') setLiveState('muted');
-        else if (newState === 'idle' || newState === 'error') setLiveState('idle');
-        else if (newState === 'connecting') setLiveState('connecting');
-      },
-      onError: (err) => { console.warn('[live]', err.message); setLiveState('idle'); },
-    });
+    const session = createLiveSession(apiKey, []);
     setLiveSession(session);
     setLiveState('connecting');
     setStage('guide');
@@ -394,22 +387,7 @@ export default function App() {
           if (result?.skills?.length) setMatchedSkills(result.skills);
         }).catch(() => {});
 
-        const prompt = '당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자가 올려준 사진 화면을 보며 질문하고 있습니다. 친절하고 쉬운 한국어로 음성 안내를 하세요.';
-        const session = startLiveSession(apiKey, {
-          systemPrompt: prompt,
-          onResponse: () => {},
-          onTranscription: ({speaker, text}) => {
-            if (speaker === 'user') console.log('[live] 🎤', text);
-            else console.log('[live] 🤖', text);
-          },
-          onStateChange: (newState) => {
-            if (newState === 'ready' || newState === 'listening') setLiveState('listening');
-            else if (newState === 'muted') setLiveState('muted');
-            else if (newState === 'idle' || newState === 'error') setLiveState('idle');
-            else if (newState === 'connecting') setLiveState('connecting');
-          },
-          onError: (err) => { console.warn('[live]', err.message); setLiveState('idle'); },
-        });
+        const session = createLiveSession(apiKey, []);
         setLiveSession(session);
         setLiveState('connecting');
         setStage('guide');
