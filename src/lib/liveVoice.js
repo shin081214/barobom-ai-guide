@@ -25,8 +25,15 @@ export function startLiveSession(apiKey, opts = {}) {
   // Without this, React cannot see the closure mutation and the <video>
   // element stays in its initial empty state (fallback to DemoKiosk).
   let videoStream = null;
+  let videoSettings = null; // { width, height, aspectRatio, frameRate, facingMode } from getSettings()
   function setVideoStream(next) {
     videoStream = next;
+    if (next) {
+      const track = next.getVideoTracks?.()[0];
+      videoSettings = track?.getSettings?.() ?? null;
+    } else {
+      videoSettings = null;
+    }
     try { onVideoStreamChange(next); } catch { /* listener may be torn down */ }
   }
   let videoEl = null, videoCanvas = null, videoTimer = null;
@@ -161,14 +168,26 @@ export function startLiveSession(apiKey, opts = {}) {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('이 브라우저에서는 카메라를 사용할 수 없습니다. HTTPS 또는 localhost에서 열어주세요.');
     }
+    // 제약: 후면 카메라 우선 + 상한만 두고 자동 선택. ideal 없이 width/height를
+    // 좁게 잡으면 일부 기기에서 sensor보다 작은 해상도가 선택되어 화질이
+    // 떨어지고 bbox 정확도가 나빠진다. max는 4K처럼 과한 해상도를 막기 위함.
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: 640, max: 1280 },
-        height: { ideal: 480, max: 720 },
+        width: { max: 1920 },
+        height: { max: 1080 },
       },
       audio: false,
     });
+    // 브라우저가 실제로 적용한 해상도를 읽어둔다. videoEl.videoWidth/Height와
+    // 거의 동일하지만, getSettings()는 facingMode/frameRate 등도 함께 알려줘서
+    // 디버깅과 박스 정합 검증에 유용하다.
+    const track = stream.getVideoTracks?.()[0];
+    const settings = track?.getSettings?.() ?? null;
+    if (settings?.width && settings?.height) {
+      console.log('[live] camera selected:', `${settings.width}x${settings.height}`,
+        'facing:', settings.facingMode, 'fps:', settings.frameRate);
+    }
     setVideoStream(stream);
     return stream;
   }
@@ -474,5 +493,6 @@ export function startLiveSession(apiKey, opts = {}) {
 
     get state() { return state; },
     get videoStream() { return videoStream; },
+    getVideoSettings() { return videoSettings; },
   };
 }

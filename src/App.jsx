@@ -57,6 +57,7 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
   const imageRef = useRef(null);
   const videoRef = useRef(null);
   const [mediaBounds, setMediaBounds] = useState(null);
+  const [liveResolution, setLiveResolution] = useState(null); // { width, height } for the live overlay pill
 
   useEffect(() => {
     const video = videoRef.current;
@@ -112,25 +113,36 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
       const frameRect = frame.getBoundingClientRect();
       const displayWidth = videoRect.width;
       const displayHeight = videoRect.height;
+      const intrinsicWidth = video.videoWidth;
+      const intrinsicHeight = video.videoHeight;
       if (displayWidth < 1 || displayHeight < 1) {
         // 아직 layout이 잡히기 전 — 박스를 그리지 않는다.
         setMediaBounds(null);
+        setLiveResolution(null);
         return;
       }
       const bounds = getContainedImageBounds({
         containerWidth,
         containerHeight,
-        naturalWidth: video.videoWidth,
-        naturalHeight: video.videoHeight,
+        naturalWidth: intrinsicWidth,
+        naturalHeight: intrinsicHeight,
         displayWidth,
         displayHeight,
       });
       setMediaBounds(bounds ? { ...bounds, source: 'video' } : null);
+      // 카메라가 실제로 선택한 해상도를 pill로 노출해서 사용자가
+      // 자동 감지 결과를 확인할 수 있게 한다.
+      if (intrinsicWidth > 0 && intrinsicHeight > 0) {
+        setLiveResolution({ width: intrinsicWidth, height: intrinsicHeight });
+      } else {
+        setLiveResolution(null);
+      }
       return;
     }
 
     // image/video 둘 다 없는 케이스 (라이브 모드 placeholder).
     setMediaBounds(null);
+    setLiveResolution(null);
   }, [imageUrl, videoStream]);
 
   useEffect(() => {
@@ -216,6 +228,11 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
           >
             <span>{step.label}</span><i aria-hidden="true" />
           </div>
+        </div>
+      )}
+      {isLiveMode && videoStream && liveResolution && (
+        <div className="live-resolution-pill" aria-live="polite">
+          {liveResolution.width} × {liveResolution.height}
         </div>
       )}
     </div>
