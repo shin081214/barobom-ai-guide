@@ -122,7 +122,9 @@ export async function POST(request) {
       ?.map((part) => part.text || '')
       .join('') || '';
     const parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim());
-    return Response.json(normalizeAnalysis(parsed));
+    const result = normalizeAnalysis(parsed);
+    result.skill_reference = [];  // populated when backend /v1/identify integration completed
+    return Response.json(result);
   } catch (error) {
     console.error('Analysis error:', error);
     return Response.json({ error: '사진 분석 중 문제가 생겼습니다.' }, { status: 500 });

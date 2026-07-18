@@ -85,6 +85,7 @@ test('GEMINI_API_KEY만 설정되면 정상 분석 흐름으로 진행한다', a
         box: { x: 10, y: 20, w: 30, h: 15 },
       }],
     }],
+    skill_reference: [],
   });
   expect(fetch).toHaveBeenCalledOnce();
 });

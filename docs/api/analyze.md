@@ -59,7 +59,8 @@ Content-Type: application/json
         }
       ]
     }
-  ]
+  ],
+  "skill_reference": []
 }
 ```
 
@@ -68,6 +69,7 @@ Content-Type: application/json
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `goals` | `Array<Goal>` | 분석된 목표 목록, 최대 4개 |
+| `skill_reference` | `Array` | 디바이스 식별 기반 스킬 참조 (backend `/v1/identify` 연동 시 채워짐, 현재는 빈 배열) |
 | `goals[].id` | `string` | `"goal-1"`, `"goal-2"` … 순차 ID |
 | `goals[].label` | `string` | 목표 요약 제목 (중복 시 empty → 해당 goal 제거됨) |
 | `goals[].hint` | `string` | 추가 조언 문구 (기본값: `"차근차근 안내해 드려요."`) |
@@ -169,6 +171,7 @@ Gemini API가 할당량 초과(Quota exceeded)를 반환하면 429 상태 코드
 
 | 날짜 | 버전 | 변경 |
 |---|---|---|
+| 2026-07-19 | 0.2.2 | `skill_reference` 플레이스홀더 필드 추가 |
 | 2026-07-19 | 0.2.1 | `FASTAPI_URL` 선택(향후 사용)으로 변경, 429 RATE_LIMITED 문서화, `GEMINI_MODEL` 선택 변수 명시 |
 | 2026-07-18 | 0.2.0 | `MISSING_CONFIG` 응답 추가, `FASTAPI_URL` 필수, bbox 정규화 문서화 |
 | 2026-07-17 | 0.1.0 | 최초 배포 (Gemini 키 503, 요청 검증, JSON 스키마) |
