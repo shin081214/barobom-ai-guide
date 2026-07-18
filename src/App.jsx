@@ -489,6 +489,9 @@ export default function App() {
     let accumulatedText = '';
     let lastBoxRef = null; // 직전에 set한 박스 (불필요한 리렌더 방지)
     let lastUserTurnText = ''; // 직전 사용자 발화 누적. 새 사용자 발화 감지.
+    let nextStepTriggered = false;
+    let prevStepTriggered = false;
+    let lastSetStep = -1;
 
     const tryUpdateBox = (next) => {
       if (!next) return;
@@ -511,6 +514,66 @@ export default function App() {
         accumulatedText += text;
         const box = parseBoxFromText(accumulatedText);
         tryUpdateBox(box);
+
+        const cleanText = accumulatedText.replace(/\s+/g, ' ');
+        setSelectedGoal(prev => {
+          if (!prev) return prev;
+          if (prev.id === 'goal-live') {
+            let targetStep = -1;
+            if (cleanText.includes('1단계') || cleanText.includes('첫 번째')) targetStep = 0;
+            else if (cleanText.includes('2단계') || cleanText.includes('두 번째')) targetStep = 1;
+            else if (cleanText.includes('3단계') || cleanText.includes('세 번째')) targetStep = 2;
+            else if (cleanText.includes('4단계') || cleanText.includes('네 번째')) targetStep = 3;
+            else if (cleanText.includes('5단계') || cleanText.includes('다섯 번째')) targetStep = 4;
+
+            if (targetStep >= 0 && targetStep !== lastSetStep) {
+              lastSetStep = targetStep;
+              const currentLen = prev.steps.length;
+              if (targetStep >= currentLen) {
+                const newSteps = [...prev.steps];
+                for (let i = currentLen; i <= targetStep; i++) {
+                  newSteps.push({
+                    text: `${i + 1}단계 안내가 진행 중입니다.`,
+                    label: `실시간 ${i + 1}단계`,
+                    box: null
+                  });
+                }
+                setStepIndex(targetStep);
+                return { ...prev, steps: newSteps };
+              } else {
+                setStepIndex(targetStep);
+              }
+            }
+            return prev;
+          } else {
+            let targetStep = -1;
+            if (cleanText.includes('1단계') || cleanText.includes('첫 번째')) targetStep = 0;
+            else if (cleanText.includes('2단계') || cleanText.includes('두 번째')) targetStep = 1;
+            else if (cleanText.includes('3단계') || cleanText.includes('세 번째')) targetStep = 2;
+            else if (cleanText.includes('4단계') || cleanText.includes('네 번째')) targetStep = 3;
+            else if (cleanText.includes('5단계') || cleanText.includes('다섯 번째')) targetStep = 4;
+
+            if (targetStep >= 0) {
+              if (targetStep < prev.steps.length && targetStep !== lastSetStep) {
+                lastSetStep = targetStep;
+                setStepIndex(targetStep);
+              }
+            } else if (cleanText.includes('다음 단계') || cleanText.includes('다음으로') || cleanText.includes('넘어갈')) {
+              if (!nextStepTriggered) {
+                nextStepTriggered = true;
+                setStepIndex(current => Math.min(prev.steps.length - 1, current + 1));
+              }
+            } else if (cleanText.includes('이전 단계') || cleanText.includes('이전으로') || cleanText.includes('되돌아')) {
+              if (!prevStepTriggered) {
+                prevStepTriggered = true;
+                setStepIndex(current => Math.max(0, current - 1));
+              }
+            } else if (cleanText.includes('완료') || cleanText.includes('다 했습니다') || cleanText.includes('마쳤습니다')) {
+              setStage('done');
+            }
+            return prev;
+          }
+        });
       },
       onTranscription: ({speaker, text}) => {
         if (speaker === 'user') {
@@ -522,6 +585,9 @@ export default function App() {
             // 지우지 않는다). 모델이 [box:] 새로 보내면 tryUpdateBox로 갱신.
             // 새 박스가 절대 안 오면 reset()/세션 종료 타이밍에 사라진다.
             accumulatedText = '';
+            nextStepTriggered = false;
+            prevStepTriggered = false;
+            lastSetStep = -1;
           }
         } else {
           console.log('[live] 🤖', text);
