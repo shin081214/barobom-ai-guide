@@ -52,10 +52,17 @@ function DemoKiosk() {
   );
 }
 
-function VisualGuide({ imageUrl, step }) {
+function VisualGuide({ imageUrl, step, videoStream }) {
   const frameRef = useRef(null);
   const imageRef = useRef(null);
+  const videoRef = useRef(null);
   const [imageBounds, setImageBounds] = useState(null);
+
+  useEffect(() => {
+    if (videoRef.current && videoStream) {
+      videoRef.current.srcObject = videoStream;
+    }
+  }, [videoStream]);
 
   const measureImage = useCallback(() => {
     const frame = frameRef.current;
@@ -100,9 +107,19 @@ function VisualGuide({ imageUrl, step }) {
 
   return (
     <div className="visual-frame" ref={frameRef}>
-      {imageUrl
-        ? <img ref={imageRef} src={imageUrl} alt="사용자가 올린 안내 대상 화면" onLoad={measureImage} />
-        : <DemoKiosk />}
+      {imageUrl ? (
+        <img ref={imageRef} src={imageUrl} alt="사용자가 올린 안내 대상 화면" onLoad={measureImage} />
+      ) : videoStream ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <DemoKiosk />
+      )}
       {step?.box && overlayStyle && (
         <div className="visual-image-overlay" style={overlayStyle}>
           <div
@@ -851,7 +868,7 @@ export default function App() {
               <button className="reset-button" type="button" onClick={reset}><RotateCcw size={18} /> 처음부터</button>
             </div>
             <div className="guide-layout">
-              <div className="image-card guide-image"><VisualGuide imageUrl={imageUrl} step={displayStep} /></div>
+              <div className="image-card guide-image"><VisualGuide imageUrl={imageUrl} step={displayStep} videoStream={liveSession?.videoStream} /></div>
               <aside className="instruction-card">
                 <div className="progress-head"><span>{stepIndex + 1} / {totalSteps} 단계</span><small>천천히 하셔도 괜찮아요</small></div>
                 <div className="progress-track"><i style={{ width: `${progress}%` }} /></div>

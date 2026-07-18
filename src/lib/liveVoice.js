@@ -462,5 +462,6 @@ export function startLiveSession(apiKey, opts = {}) {
     },
 
     get state() { return state; },
+    get videoStream() { return videoStream; },
   };
 }
