@@ -4,6 +4,7 @@
 
 | 커밋 | 내용 |
 |---|---|
+| `aab4e8f` | fix(live): parse bounding box from speech transcription instead of raw parts text |
 | `11159e4` | fix(live): resolve image overlay bounds rendering and generalize box regex pattern |
 | `8d8970a` | fix(live): robust last-box matching and noise-resilient VAD clearing for Live mode |
 | `73cae80` | feat(live): render live camera feed on the screen during Live API session |
