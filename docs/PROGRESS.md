@@ -4,6 +4,7 @@
 
 | 커밋 | 내용 |
 |---|---|
+| `8d8970a` | fix(live): robust last-box matching and noise-resilient VAD clearing for Live mode |
 | `73cae80` | feat(live): render live camera feed on the screen during Live API session |
 | `ad35e2b` | fix(live): add robustness guard and percentage clamping to parseBoxFromText |
 | `b4f4211` | feat(live): update Gemini Live API system prompt and refactor sessions to createLiveSession |
