@@ -150,6 +150,7 @@ export default function App() {
   const [customLoading, setCustomLoading] = useState(false);
   const [customError, setCustomError] = useState('');
   const [deviceInfo, setDeviceInfo] = useState(null);
+  const [matchedSkills, setMatchedSkills] = useState([]);
   const [liveSession, setLiveSession] = useState(null);
   const [liveState, setLiveState] = useState('idle');
   const [imageBase64, setImageBase64] = useState(null);
@@ -179,10 +180,19 @@ export default function App() {
     catch { return ''; }
   }
 
-  function createLiveSession(apiKey) {
-    const prompt = selectedGoal
+  function createLiveSession(apiKey, skills = []) {
+    let prompt = selectedGoal
       ? `당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자는 지금 "${selectedGoal.label}"을(를) 하고 있습니다. 현재 단계: "${step?.text || ''}". 친절하고 쉬운 한국어로 짧게 대답하세요.`
       : '당신은 고령층을 위한 디지털 기기 사용 도우미입니다. 사용자가 카메라 속 화면에 대해 물어보면 친절하고 쉬운 한국어로 대답하세요.';
+
+    // Inject matched skill content as reference knowledge for the model.
+    if (skills.length > 0) {
+      const skillBlock = skills.map((s) =>
+        `## 기기: ${s.title} (${s.brand || ''} ${s.model || ''})\n${s.content}`
+      ).join('\n\n');
+      prompt += `\n\n[아래는 이 기기에 대해 알고 있는 사용 가이드입니다. 이 정보를 참고해서 더 정확하게 안내해주세요.]\n\n${skillBlock}`;
+    }
+
     return startLiveSession(apiKey, {
       systemPrompt: prompt,
       onResponse: () => {},
@@ -204,10 +214,25 @@ export default function App() {
     if (liveState === 'idle') {
       const apiKey = await fetchGeminiApiKey();
       if (!apiKey) { alert('Gemini API 키가 설정되지 않았습니다.'); return; }
-      const session = createLiveSession(apiKey);
+
+      // Fetch matching device skills from backend so the Live session
+      // can reference them during conversation.
+      let skills = matchedSkills;
+      if (!skills.length && imageBase64) {
+        try {
+          const result = await identifyDevice(imageBase64, imageMimeType);
+          if (result?.device) setDeviceInfo(result.device);
+          if (result?.skills?.length) {
+            skills = result.skills;
+            setMatchedSkills(skills);
+          }
+        } catch { /* backend may be unreachable — proceed without skills */ }
+      }
+
+      const session = createLiveSession(apiKey, skills);
       setLiveSession(session);
       setLiveState('connecting');
-      console.log('[app] starting unified Live API vision mode, imageBase64:', !!imageBase64, 'imageMimeType:', imageMimeType);
+      console.log('[app] starting Live API vision mode with', skills.length, 'matched skills');
       await session.speakWithVision(imageBase64, imageMimeType);
     } else if (liveState === 'listening') {
       if (liveSession) liveSession.mute();
@@ -270,9 +295,10 @@ export default function App() {
       chooseGoal(analysis.goals[0]);
       publishEvent('new_photo_uploaded');
 
-      // Identify device (fire and forget — doesn't block UX)
+      // Identify device + fetch skills (fire and forget — doesn't block UX)
       identifyDevice(image, mimeType).then((result) => {
         if (result?.device) setDeviceInfo(result.device);
+        if (result?.skills?.length) setMatchedSkills(result.skills);
       });
     } catch (error) {
       setAnalysisPayload(null);
@@ -417,6 +443,7 @@ export default function App() {
     recognitionRef.current = null;
     setStage('home');
     setDeviceInfo(null);
+    setMatchedSkills([]);
     setImageUrl('');
     setSourceName('');
     setGoals([]);
