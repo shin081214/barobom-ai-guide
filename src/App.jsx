@@ -102,11 +102,12 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
 
     if (videoStream && video) {
       // 라이브 카메라 경로: video element가 container 안에서 실제로 차지하는
-      // 사각형을 그대로 신뢰한다. intrinsic(videoWidth/Height)만으로 contain
-      // 영역을 계산하면, 안드로이드 후면 카메라처럼 landscape intrinsics을
-      // portrait element로 표시하는 경우 사용자 눈에 보이는 영상과 박스가
-      // 어긋난다. element.clientWidth/Height는 object-fit: contain 적용 후의
-      // 실제 렌더 사이즈라서 박스와 정확히 일치한다.
+      // 사각형(display) *안에서* videoWidth/Height 비율로 contain 한 결과가
+      // 사용자가 화면에서 보는 실제 영상이다. 따라서:
+      //   - display: element.getBoundingClientRect() (object-fit 적용 후)
+      //   - natural: video.videoWidth / video.videoHeight
+      // 를 함께 넘겨 letterbox/pillarbox 영역을 정확히 계산한다. display만
+      // 넘기면 host element 전체 영역이 박스로 잡혀 검정 여백 위로 어긋난다.
       const videoRect = video.getBoundingClientRect();
       const frameRect = frame.getBoundingClientRect();
       const displayWidth = videoRect.width;
@@ -119,6 +120,8 @@ function VisualGuide({ imageUrl, step, videoStream, isLiveMode = false }) {
       const bounds = getContainedImageBounds({
         containerWidth,
         containerHeight,
+        naturalWidth: video.videoWidth,
+        naturalHeight: video.videoHeight,
         displayWidth,
         displayHeight,
       });

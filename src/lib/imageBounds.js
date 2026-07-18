@@ -4,16 +4,23 @@ function isPositiveFinite(value) {
 
 /**
  * Returns the pixel rectangle occupied by an object-fit: contain image or
- * video. Pass either `naturalWidth/Height` (intrinsic media size, in CSS
- * pixels for the media itself) OR `displayWidth/Height` (the actual rendered
- * rectangle the media occupies inside the container, in container pixels).
+ * video, in coordinates relative to the containing visual frame.
  *
- * Prefer `displayWidth/Height` when available — for camera streams on mobile,
- * the intrinsic dimensions can be landscape (e.g. 1920×1080) while the element
- * is rendered portrait, and intrinsic-only containment will produce a band
- * that does not match what the user sees on screen.
+ * Two inputs control the calculation:
  *
- * All returned values are relative to the containing visual frame.
+ *   - `naturalWidth / naturalHeight` are the *intrinsic* media dimensions
+ *     (the unscaled pixel size of the still image, or videoWidth/videoHeight
+ *     for a running video element).
+ *
+ *   - `displayWidth / displayHeight` describe the box that the host element
+ *     actually occupies after the browser applied object-fit: contain. For a
+ *     plain <img>, this matches the element's clientWidth/clientHeight. For
+ *     a <video>, it is the element's getBoundingClientRect().
+ *
+ * Both are optional; if both are provided the rectangle is computed inside
+ * the display rect using the intrinsic ratio (mirroring what object-fit:
+ * contain does), which correctly accounts for letterbox / pillarbox black
+ * bars inside the host element.
  */
 export function getContainedImageBounds({
   containerWidth,
@@ -27,45 +34,56 @@ export function getContainedImageBounds({
     return null;
   }
 
-  // 1. If caller provides the actual rendered rect, trust it. This is the
-  //    most accurate path for <video> because object-fit: contain has already
-  //    computed the layout box by the time we run.
-  if ([displayWidth, displayHeight].every(isPositiveFinite)) {
-    return {
-      left: 0,
-      top: 0,
-      width: Math.min(displayWidth, containerWidth),
-      height: Math.min(displayHeight, containerHeight),
-    };
-  }
+  const hasNatural = [naturalWidth, naturalHeight].every(isPositiveFinite);
+  const hasDisplay = [displayWidth, displayHeight].every(isPositiveFinite);
 
-  // 2. Fall back to intrinsic dimensions. Note: for camera streams this can
-  //    disagree with the rendered rect (portrait vs. landscape rotation), so
-  //    callers should prefer the displayWidth/Height path.
-  if (![naturalWidth, naturalHeight].every(isPositiveFinite)) {
+  if (!hasNatural && !hasDisplay) {
     return null;
   }
 
-  const containerRatio = containerWidth / containerHeight;
-  const imageRatio = naturalWidth / naturalHeight;
+  // Resolve the inner rect's width/height. If we have a display rect, the
+  // inner rect lives inside it (object-fit: contain on the host element).
+  // Otherwise we work directly inside the container.
+  const outerWidth = hasDisplay ? displayWidth : containerWidth;
+  const outerHeight = hasDisplay ? displayHeight : containerHeight;
 
-  if (imageRatio > containerRatio) {
-    const width = containerWidth;
-    const height = width / imageRatio;
+  if (!hasNatural) {
+    // Display-only path: nothing to compute a ratio from, so the host rect
+    // is the best answer we can give.
     return {
-      left: 0,
-      top: (containerHeight - height) / 2,
-      width,
-      height,
+      left: hasDisplay ? 0 : 0,
+      top: hasDisplay ? 0 : 0,
+      width: Math.min(outerWidth, containerWidth),
+      height: Math.min(outerHeight, containerHeight),
     };
   }
 
-  const height = containerHeight;
-  const width = height * imageRatio;
+  const outerRatio = outerWidth / outerHeight;
+  const imageRatio = naturalWidth / naturalHeight;
+
+  let innerWidth;
+  let innerHeight;
+  if (imageRatio > outerRatio) {
+    // intrinsic is wider than the host box → pillarbox (bars on top/bottom).
+    innerWidth = outerWidth;
+    innerHeight = outerWidth / imageRatio;
+  } else {
+    // intrinsic is taller than the host box → letterbox (bars on left/right).
+    innerHeight = outerHeight;
+    innerWidth = outerHeight * imageRatio;
+  }
+
+  // The inner rect is centered inside the outer (host element or container).
+  const offsetX = (outerWidth - innerWidth) / 2;
+  const offsetY = (outerHeight - innerHeight) / 2;
+
+  // Frame coordinates: when a display rect is supplied, its top-left is the
+  // origin in frame space, so add the offset inside the host. Otherwise the
+  // outer IS the frame, so the offset is already the frame-space offset.
   return {
-    left: (containerWidth - width) / 2,
-    top: 0,
-    width,
-    height,
+    left: offsetX,
+    top: offsetY,
+    width: innerWidth,
+    height: innerHeight,
   };
 }
