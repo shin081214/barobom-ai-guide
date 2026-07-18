@@ -131,11 +131,19 @@ function parseBoxFromText(text) {
   if (!text) return null;
   const match = text.match(/\[box:\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\]/i);
   if (match) {
+    const x = parseFloat(match[1]);
+    const y = parseFloat(match[2]);
+    const w = parseFloat(match[3]);
+    const h = parseFloat(match[4]);
+
+    if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) {
+      return null;
+    }
     return {
-      x: parseFloat(match[1]),
-      y: parseFloat(match[2]),
-      w: parseFloat(match[3]),
-      h: parseFloat(match[4]),
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+      w: Math.max(0, Math.min(100, w)),
+      h: Math.max(0, Math.min(100, h)),
     };
   }
   return null;
