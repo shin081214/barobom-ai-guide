@@ -504,6 +504,10 @@ export default function App() {
                 <button type="submit" className="primary-button intent-next">
                   다음 단계 <ChevronRight size={20} />
                 </button>
+                <button type="button" className="secondary-button intent-live">
+                  <Mic size={20} aria-hidden="true" />
+                  실시간 AI로 시작
+                </button>
               </form>
               <div className="trust-row">
                 <span><Check size={17} /> 회원가입 없이</span>

@@ -74,6 +74,7 @@ button:focus-visible, label[role='button']:focus-within { outline: 4px solid rgb
 .intent-mic-button:disabled { cursor: wait; }
 .intent-card .voice-message { margin: 10px 0 0; color: #b33f2d; font-size: 12px; font-weight: 700; text-align: left; }
 .intent-next { width: 100%; margin-top: 12px; }
+.intent-live { width: 100%; margin-top: 10px; color: var(--green-dark); }
 .primary-button, .secondary-button { min-height: 58px; border-radius: 17px; padding: 0 23px; font-size: 16px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; text-decoration: none; }
 .primary-button { border: 0; background: var(--green); color: white; box-shadow: 0 12px 25px rgba(22, 135, 102, .22); }
 .primary-button:hover { background: var(--green-dark); transform: translateY(-1px); }
