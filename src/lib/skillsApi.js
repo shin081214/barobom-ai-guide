@@ -27,9 +27,9 @@ export async function fetchObservations(deviceId = null) {
 
 export async function fetchSkillContent(skillId) {
   try {
-    // We fetch via the list endpoint, backend doesn't have a single GET yet.
-    const all = await fetchSkills();
-    return all.find((s) => s.id === skillId) || null;
+    const res = await fetch(`${BACKEND_URL}/v1/skills/${skillId}`);
+    if (!res.ok) return null;
+    return await res.json();
   } catch {
     return null;
   }

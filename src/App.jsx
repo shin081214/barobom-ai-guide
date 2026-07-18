@@ -5,7 +5,7 @@ import { getContainedImageBounds } from './lib/imageBounds.js';
 import { getAnonymousId } from './lib/anonId.js';
 import { publishEvent, resetSession, identifyDevice, reportObservation } from './lib/feedback.js';
 import { startLiveSession } from './lib/liveVoice.js';
-import { fetchSkills, fetchObservations } from './lib/skillsApi.js';
+import { fetchSkills, fetchObservations, fetchSkillContent } from './lib/skillsApi.js';
 import { getConsent, setConsent } from './lib/consent.js';
 
 import {
@@ -421,6 +421,7 @@ export default function App() {
   const [consent, setConsentState] = useState(() => getConsent());
   const [liveChoiceOpen, setLiveChoiceOpen] = useState(false);
   const [isLivePhotoMode, setIsLivePhotoMode] = useState(false);
+  const [selectedSkillDetail, setSelectedSkillDetail] = useState(null);
   const [liveBox, setLiveBox] = useState(null);
   const inputRef = useRef(null);
   const goalInputRef = useRef(null);
@@ -938,6 +939,7 @@ export default function App() {
     setVoiceStatus('idle');
     setLiveChoiceOpen(false);
     setIsLivePhotoMode(false);
+    setSelectedSkillDetail(null);
     setLiveBox(null);
     if (inputRef.current) inputRef.current.value = '';
   }
@@ -1294,28 +1296,49 @@ export default function App() {
                   <p style={{ color: '#666', margin: 0 }}>백엔드에서 데이터를 불러오는 중...</p>
                 ) : (
                   <div style={{ display: 'grid', gap: 10 }}>
-                    {skillsData.map((s) => (
-                      <div key={s.id} style={{
-                        background: s.status === 'published' ? '#f0fdf4' : s.status === 'deprecated' ? '#f9fafb' : '#fffbeb',
-                        border: `1px solid ${s.status === 'published' ? '#86efac' : s.status === 'deprecated' ? '#d1d5db' : '#fde68a'}`,
-                        borderRadius: 12, padding: '14px 18px', opacity: s.status === 'deprecated' ? 0.6 : 1,
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                          <span style={{ fontWeight: 800, fontSize: 16 }}>{s.title}</span>
-                          <span style={{
-                            padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                            background: s.status === 'published' ? '#16a34a' : s.status === 'deprecated' ? '#6b7280' : '#d97706',
-                            color: 'white',
-                          }}>{s.status === 'published' ? '✅ 자율배포' : s.status === 'deprecated' ? '🗄️ 폐기됨' : '📝 자율검증'}</span>
-                          <span style={{ color: '#888', fontSize: 12 }}>v{s.version}</span>
+                    {skillsData.map((s) => {
+                      const isOpen = selectedSkillDetail?.id === s.id;
+                      return (
+                        <div key={s.id} onClick={async () => {
+                          if (isOpen) {
+                            setSelectedSkillDetail(null);
+                          } else {
+                            const detail = await fetchSkillContent(s.id);
+                            setSelectedSkillDetail(detail);
+                          }
+                        }} style={{
+                          background: s.status === 'published' ? '#f0fdf4' : s.status === 'deprecated' ? '#f9fafb' : '#fffbeb',
+                          border: `1px solid ${s.status === 'published' ? '#86efac' : s.status === 'deprecated' ? '#d1d5db' : '#fde68a'}`,
+                          borderRadius: 12, padding: '14px 18px', opacity: s.status === 'deprecated' ? 0.6 : 1,
+                          cursor: 'pointer', transition: 'all 0.2s',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                            <span style={{ fontWeight: 800, fontSize: 16 }}>{s.title}</span>
+                            <span style={{
+                              padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                              background: s.status === 'published' ? '#16a34a' : s.status === 'deprecated' ? '#6b7280' : '#d97706',
+                              color: 'white',
+                            }}>{s.status === 'published' ? '✅ 자율배포' : s.status === 'deprecated' ? '🗄️ 폐기됨' : '📝 자율검증'}</span>
+                            <span style={{ color: '#888', fontSize: 12 }}>v{s.version}</span>
+                          </div>
+                          <div style={{ fontSize: 13, color: '#666', marginBottom: isOpen ? 12 : 0 }}>
+                            {s.status === 'published' && 'AI가 자율 배포하여 현재 사용자에게 실시간 제공되는 최신 가이드입니다.'}
+                            {s.status === 'draft' && '자율 생성된 가이드 초안입니다. 검증 게이트를 통과해야 최종 배포됩니다.'}
+                            {s.status === 'deprecated' && '더 똑똑한 새 자율가이드 버전이 게시되어 폐기되었습니다.'}
+                          </div>
+                          {isOpen && selectedSkillDetail && (
+                            <div style={{
+                              background: 'white', border: '1px solid #e2e8f0', borderRadius: 8,
+                              padding: 16, marginTop: 12, fontSize: 14, color: '#2d3748',
+                              whiteSpace: 'pre-wrap', fontFamily: 'monospace', lineHeight: 1.5,
+                              textAlign: 'left', maxHeight: 300, overflowY: 'auto'
+                            }} onClick={(e) => e.stopPropagation()}>
+                              {selectedSkillDetail.content}
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: 13, color: '#666' }}>
-                          {s.status === 'published' && 'AI가 자율 배포하여 현재 사용자에게 실시간 제공되는 최신 가이드입니다.'}
-                          {s.status === 'draft' && '자율 생성된 가이드 초안입니다. 검증 게이트를 통과해야 최종 배포됩니다.'}
-                          {s.status === 'deprecated' && '더 똑똑한 새 자율가이드 버전이 게시되어 폐기되었습니다.'}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
