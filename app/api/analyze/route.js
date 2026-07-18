@@ -2,6 +2,9 @@ import { buildGeminiPrompt, normalizeAnalysis } from '../../../server/analyzer.j
 
 export const runtime = 'nodejs';
 
+// 현재 분석 라우트에서 실제 사용하는 필수 환경변수는 GEMINI_API_KEY 뿐입니다.
+// 아래 변수들은 future use only이므로 아직 required로 추가하지 않습니다:
+//   FASTAPI_URL, SUPABASE_URL, SUPABASE_ANON_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
 const REQUIRED_ENV = ['GEMINI_API_KEY'];
 
 function getMissingConfig() {
